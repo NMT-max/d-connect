@@ -960,6 +960,9 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
   const [scheduledTime, setScheduledTime] = useState('');
   const [isAutomating, setIsAutomating] = useState(false);
   const [lastApiStatus, setLastApiStatus] = useState<{success: boolean, message: string} | null>(null);
+  const [automationMode, setAutomationMode] = useState<'api' | 'manual'>(
+    window.location.hostname.includes('vercel.app') ? 'manual' : 'api'
+  );
 
   const whatsappPosts = posts.filter(p => p.platform === 'whatsapp');
   const pendingPosts = whatsappPosts.filter(p => p.status === 'pending');
@@ -1028,47 +1031,60 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
         setCountdown(null);
 
         (async () => {
-          setIsSending(true);
-          try {
-            const response = await fetch('/api/whatsapp/send', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                to: nextPost.target,
-                message: nextPost.content,
-                mediaUrl: nextPost.mediaUrl,
-                token: whatsappToken,
-                phoneId: whatsappPhoneId
-              })
-            });
-            
-            let data;
-            const contentType = response.headers.get("content-type");
-            if (contentType && contentType.includes("application/json")) {
-              data = await response.json();
-            } else {
-              const text = await response.text();
-              data = { error: `Server error (${response.status}): ${text.substring(0, 100)}` };
-            }
-            
-            if (response.ok) {
-              onComplete(nextPost.id);
-              setLastApiStatus({ success: true, message: 'Message sent successfully.' });
-            } else {
-              console.error("API Error Data:", data);
+          if (automationMode === 'api') {
+            setIsSending(true);
+            try {
+              const response = await fetch('/api/whatsapp/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  to: nextPost.target,
+                  message: nextPost.content,
+                  mediaUrl: nextPost.mediaUrl,
+                  token: whatsappToken,
+                  phoneId: whatsappPhoneId
+                })
+              });
+              
+              let data;
+              const contentType = response.headers.get("content-type");
+              if (contentType && contentType.includes("application/json")) {
+                data = await response.json();
+              } else {
+                const text = await response.text();
+                data = { error: `Server error (${response.status}): ${text.substring(0, 100)}` };
+              }
+              
+              if (response.ok) {
+                onComplete(nextPost.id);
+                setLastApiStatus({ success: true, message: 'Message sent successfully.' });
+              } else {
+                console.error("API Error Data:", data);
+                setIsAutomating(false);
+                const errorObj = data.error || data;
+                const errMsg = errorObj.error_user_msg || errorObj.message || (typeof errorObj === 'string' ? errorObj : 'Failed to send');
+                setLastApiStatus({ success: false, message: `Meta: ${errMsg}` });
+                alert('WhatsApp API Error: ' + errMsg);
+              }
+            } catch (e: any) {
+              console.error("Fetch Error:", e);
               setIsAutomating(false);
-              const errorObj = data.error || data;
-              const errMsg = errorObj.error_user_msg || errorObj.message || (typeof errorObj === 'string' ? errorObj : 'Failed to send');
-              setLastApiStatus({ success: false, message: `Meta: ${errMsg}` });
-              alert('WhatsApp API Error: ' + errMsg);
+              setLastApiStatus({ success: false, message: 'Server connection failed.' });
+              alert(`Connection Error to Backend: ${e.message}. For Cloud API, use the AI Studio preview URL.`);
+            } finally {
+              setIsSending(false);
+              if (pendingPosts.length === 1) {
+                setIsAutomating(false);
+                setCurrentAutoTarget(null);
+              }
             }
-          } catch (e: any) {
-            console.error("Fetch Error:", e);
-            setIsAutomating(false);
-            setLastApiStatus({ success: false, message: 'Server connection failed.' });
-            alert(`Connection Error to Backend: ${e.message}. Please use the AI Studio development URL for testing full-stack features.`);
-          } finally {
-            setIsSending(false);
+          } else {
+            // Manual Mode Logic
+            const encodedMsg = encodeURIComponent(nextPost.content);
+            const url = `https://web.whatsapp.com/send?phone=${nextPost.target}&text=${encodedMsg}`;
+            window.open(url, '_blank');
+            onComplete(nextPost.id);
+            
             if (pendingPosts.length === 1) {
               setIsAutomating(false);
               setCurrentAutoTarget(null);
@@ -1319,38 +1335,72 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                      />
                   </div>
                   <div className="bg-navy-900/50 p-4 rounded-2xl border border-gold-500/20 mb-4">
-                    <p className="text-xs text-white font-bold mb-1 italic">✅ FULLY AUTOMATED SYSTEM (CLOUD API):</p>
+                    <div className="flex justify-between items-center mb-4 pb-2 border-b border-navy-700">
+                       <p className="text-xs text-white font-bold italic">🚀 SENDING MODE:</p>
+                       <div className="flex bg-navy-800 rounded-lg p-1">
+                          <button 
+                            onClick={() => setAutomationMode('api')}
+                            className={`px-3 py-1 text-[10px] rounded-md transition-all ${automationMode === 'api' ? 'bg-gold-500 text-navy-900 font-bold' : 'text-slate-400'}`}
+                          >Cloud API</button>
+                          <button 
+                            onClick={() => setAutomationMode('manual')}
+                            className={`px-3 py-1 text-[10px] rounded-md transition-all ${automationMode === 'manual' ? 'bg-emerald-500 text-navy-900 font-bold' : 'text-slate-400'}`}
+                          >Manual</button>
+                       </div>
+                    </div>
                     
-                    {lastApiStatus && (
-                      <div className={`mt-2 p-2 rounded text-[10px] font-mono mb-2 ${lastApiStatus.success ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400 border border-red-500/30'}`}>
-                        {lastApiStatus.success ? '✓ ' : '✗ ERROR: '}{lastApiStatus.message}
+                    {automationMode === 'api' ? (
+                      <>
+                        {window.location.hostname.includes('vercel.app') && (
+                          <div className="bg-red-500/20 border border-red-500/50 p-3 rounded-xl mb-3">
+                            <p className="text-[10px] text-red-500 font-bold uppercase mb-1">⚠️ Environment Mismatch</p>
+                            <p className="text-[9px] text-slate-400">Cloud API only works in AI Studio. Switch to "Manual" mode for Vercel testing.</p>
+                          </div>
+                        )}
+
+                        {lastApiStatus && (
+                          <div className={`mt-2 p-2 rounded text-[10px] font-mono mb-2 ${lastApiStatus.success ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400 border border-red-500/30'}`}>
+                            {lastApiStatus.success ? '✓ ' : '✗ ERROR: '}{lastApiStatus.message}
+                          </div>
+                        )}
+
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-emerald-500 flex items-center gap-1 font-bold">
+                             {isSending ? 'Sending now...' : 'Channel Connected & Ready'}
+                          </p>
+                          <button 
+                            className="text-[9px] text-gold-500 underline mt-1 opacity-50 hover:opacity-100"
+                            onClick={async () => {
+                              const testNum = prompt("Enter a phone number with country code (e.g. 88017...) to test API:");
+                              if (!testNum) return;
+                              try {
+                                const res = await fetch('/api/whatsapp/send', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ to: testNum, message: "API Test Successful! Hello from Digicoup.", token: whatsappToken, phoneId: whatsappPhoneId })
+                                });
+                                
+                                let data;
+                                try { data = await res.json(); } catch(e) { data = { error: "Non-JSON response from server. Check if you are on the correct AI Studio URL." }; }
+                                
+                                alert(res.ok ? "Success! Message sent." : `Error: ${JSON.stringify(data)}`);
+                              } catch (e: any) { alert(`Server connection error: ${e.message}`); }
+                            }}
+                          >
+                            [Run Connection Test]
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-[10px] text-slate-400 leading-relaxed uppercase tracking-tighter">
+                          Using Browser Tab Automation. Requires manual "Enter" press in WhatsApp tab.
+                        </p>
+                        <p className="text-[10px] text-emerald-500 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Ready to open tabs...
+                        </p>
                       </div>
                     )}
-
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-emerald-500 flex items-center gap-1 font-bold">
-                         {isSending ? 'Sending now...' : 'Channel Connected & Ready'}
-                      </p>
-                      <button 
-                        className="text-[9px] text-gold-500 underline mt-1 opacity-50 hover:opacity-100"
-                        onClick={async () => {
-                          const testNum = prompt("Enter a phone number with country code (e.g. 88017...) to test API:");
-                          if (!testNum) return;
-                          try {
-                            const res = await fetch('/api/whatsapp/send', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ to: testNum, message: "API Test Successful! Hello from Digicoup.", token: whatsappToken, phoneId: whatsappPhoneId })
-                            });
-                            let data;
-                            try { data = await res.json(); } catch(e) { data = { error: "Non-JSON response" }; }
-                            alert(res.ok ? "Success! Message sent." : `Error: ${JSON.stringify(data)}`);
-                          } catch (e: any) { alert(`Server connection error: ${e.message}`); }
-                        }}
-                      >
-                        [Run Connection Test]
-                      </button>
-                    </div>
                   </div>
                   <div className="space-y-2 text-[10px] text-slate-500">
                     <p className="flex items-center gap-2">• Running in background via Business Channel.</p>

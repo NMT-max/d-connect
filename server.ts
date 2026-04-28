@@ -19,11 +19,13 @@ async function startServer() {
 
   // WhatsApp API Proxy Route
   app.post("/api/whatsapp/send", async (req, res) => {
+    console.log("Incoming WhatsApp Send Request:", { to: req.body.to, hasToken: !!req.body.token });
     const { to, message, mediaUrl, token: bodyToken, phoneId: bodyPhoneId } = req.body;
     const token = bodyToken || process.env.WHATSAPP_TOKEN;
     const phoneId = bodyPhoneId || process.env.WHATSAPP_PHONE_NUMBER_ID;
 
     if (!token || !phoneId) {
+      console.error("Missing Credentials");
       return res.status(400).json({ error: "WhatsApp API credentials missing. Please set them in Social Hub settings." });
     }
 
@@ -40,11 +42,10 @@ async function startServer() {
       };
 
       if (mediaUrl) {
-         // Sending media requires a different payload structure usually
-         // For now, let's stick to text or include link in text.
          payload.text.body = `${message}\n\nMedia: ${mediaUrl}`;
       }
 
+      console.log("Sending to Meta API...");
       const response = await axios.post(
         `https://graph.facebook.com/v17.0/${phoneId}/messages`,
         payload,
@@ -55,11 +56,13 @@ async function startServer() {
           },
         }
       );
-
+      
+      console.log("Meta API Response Success");
       res.json(response.data);
     } catch (error: any) {
-      console.error("WhatsApp Send Error:", error.response?.data || error.message);
-      res.status(error.response?.status || 500).json(error.response?.data || { error: "Failed to send message" });
+      const errorData = error.response?.data || { error: error.message };
+      console.error("WhatsApp Send Error:", JSON.stringify(errorData));
+      res.status(error.response?.status || 500).json(errorData);
     }
   });
 
