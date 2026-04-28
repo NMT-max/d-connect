@@ -230,7 +230,13 @@ export default function App() {
             <p className="text-slate-500 text-sm mt-3 leading-relaxed">Your AI-powered multi-channel marketing hub. Secure, automated, and ready to scale.</p>
           </div>
           <button 
-            onClick={loginWithGoogle}
+            onClick={async () => {
+              try {
+                await loginWithGoogle();
+              } catch (error: any) {
+                alert("Login Failed: " + error.message + "\n\nTip: Make sure to add your Vercel domain to Firebase Authorized domains.");
+              }
+            }}
             className="w-full py-4 bg-white text-navy-900 font-bold rounded-2xl shadow-lg hover:bg-slate-100 active:scale-95 transition-all flex items-center justify-center gap-3"
           >
             <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
