@@ -20,7 +20,6 @@ service cloud.firestore {
         && data.time is string && data.time.size() <= 100
         && data.status in ['pending', 'sent', 'failed']
         && data.userId == request.auth.uid
-        && data.userId is string && data.userId.size() <= 128
         && (!('target' in data) || (data.target is string && data.target.size() <= 256))
         && (!('mediaUrl' in data) || (data.mediaUrl is string && data.mediaUrl.size() <= 2048))
         && (data.createdAt is timestamp || data.createdAt is string)
@@ -28,28 +27,24 @@ service cloud.firestore {
     }
 
     match /scheduled_posts/{postId} {
-      allow get: if isOwner(existing().userId) && isValidId(postId);
+      allow get: if isOwner(existing().userId);
       allow list: if isOwner(resource.data.userId);
       
       allow create: if isSignedIn() 
-        && isEmailVerified()
-        && isValidId(postId)
         && isValidScheduledPost(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
 
       allow update: if isOwner(existing().userId)
-        && isValidId(postId)
         && isValidScheduledPost(incoming())
         && incoming().userId == existing().userId
         && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
         && (
           (incoming().diff(existing()).affectedKeys().hasOnly(['content', 'time', 'platform', 'updatedAt', 'target', 'mediaUrl'])) ||
           (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) && existing().status == 'pending')
         );
 
-      allow delete: if isOwner(existing().userId) && isValidId(postId);
+      allow delete: if isOwner(existing().userId);
     }
 
     function isValidUserSetting(data) {
