@@ -818,6 +818,9 @@ function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waT
               placeholder="Phone Number ID" 
               className="w-full bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-emerald-500/50 text-sm" 
             />
+            <p className="text-[9px] text-slate-500 italic mt-2">
+              💡 Note: If using a Meta Test Number, you must first verify the recipient number in your Meta Dashboard. Direct messages require an active "Conversation Window" (user must message you first) unless using Templates.
+            </p>
           </div>
         </div>
       </section>
@@ -1045,15 +1048,18 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
               onComplete(nextPost.id);
               setLastApiStatus({ success: true, message: 'Message sent successfully.' });
             } else {
-              console.error("API Error:", data);
+              console.error("API Error Data:", data);
               setIsAutomating(false);
-              const errMsg = data.error?.message || data.error?.error_user_msg || data.error || 'Failed to send';
-              setLastApiStatus({ success: false, message: errMsg });
+              // Extract the most helpful error message from Meta's response
+              const errorObj = data.error || data;
+              const errMsg = errorObj.error_user_msg || errorObj.message || (typeof errorObj === 'string' ? errorObj : 'Failed to send');
+              setLastApiStatus({ success: false, message: `Meta: ${errMsg}` });
               alert('WhatsApp API Error: ' + errMsg);
             }
           } catch (e) {
             console.error("Fetch Error:", e);
             setIsAutomating(false);
+            setLastApiStatus({ success: false, message: 'Server connection failed.' });
             alert('Connection Error to Backend. Please ensure settings are correct.');
           } finally {
             setIsSending(false);
@@ -1319,6 +1325,24 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                       <p className="text-[10px] text-emerald-500 flex items-center gap-1 font-bold">
                          {isSending ? 'Sending now...' : 'Channel Connected & Ready'}
                       </p>
+                      <button 
+                        className="text-[9px] text-gold-500 underline mt-1 opacity-50 hover:opacity-100"
+                        onClick={async () => {
+                          const testNum = prompt("Enter a phone number with country code (e.g. 88017...) to test API:");
+                          if (!testNum) return;
+                          try {
+                            const res = await fetch('/api/whatsapp/send', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ to: testNum, message: "API Test Successful! Hello from Digicoup.", token: whatsappToken, phoneId: whatsappPhoneId })
+                            });
+                            const data = await res.json();
+                            alert(res.ok ? "Success! Message sent." : `Error: ${JSON.stringify(data)}`);
+                          } catch (e) { alert("Server connection error."); }
+                        }}
+                      >
+                        [Run Connection Test]
+                      </button>
                     </div>
                   </div>
                   <div className="space-y-2 text-[10px] text-slate-500">
