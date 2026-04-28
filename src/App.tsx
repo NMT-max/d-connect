@@ -450,7 +450,8 @@ function AIView({ prompt, setPrompt, channel, setChannel, language, setLanguage,
                     content: result, 
                     platform: channel, 
                     scheduledAt: scheduledDate, 
-                    target: 'Broadcast' 
+                    target: 'Broadcast',
+                    status: 'pending'
                   });
                   setScheduleTime('');
                   alert('Post Scheduled Successfully!');
