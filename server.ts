@@ -12,6 +12,11 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", environment: process.env.NODE_ENV || "development" });
+  });
+
   // WhatsApp API Proxy Route
   app.post("/api/whatsapp/send", async (req, res) => {
     const { to, message, mediaUrl, token: bodyToken, phoneId: bodyPhoneId } = req.body;

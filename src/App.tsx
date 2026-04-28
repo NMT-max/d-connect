@@ -1042,7 +1042,14 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
               })
             });
             
-            const data = await response.json();
+            let data;
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+              data = await response.json();
+            } else {
+              const text = await response.text();
+              data = { error: `Server error (${response.status}): ${text.substring(0, 100)}` };
+            }
             
             if (response.ok) {
               onComplete(nextPost.id);
@@ -1050,17 +1057,16 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
             } else {
               console.error("API Error Data:", data);
               setIsAutomating(false);
-              // Extract the most helpful error message from Meta's response
               const errorObj = data.error || data;
               const errMsg = errorObj.error_user_msg || errorObj.message || (typeof errorObj === 'string' ? errorObj : 'Failed to send');
               setLastApiStatus({ success: false, message: `Meta: ${errMsg}` });
               alert('WhatsApp API Error: ' + errMsg);
             }
-          } catch (e) {
+          } catch (e: any) {
             console.error("Fetch Error:", e);
             setIsAutomating(false);
             setLastApiStatus({ success: false, message: 'Server connection failed.' });
-            alert('Connection Error to Backend. Please ensure settings are correct.');
+            alert(`Connection Error to Backend: ${e.message}. Please use the AI Studio development URL for testing full-stack features.`);
           } finally {
             setIsSending(false);
             if (pendingPosts.length === 1) {
@@ -1336,9 +1342,10 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ to: testNum, message: "API Test Successful! Hello from Digicoup.", token: whatsappToken, phoneId: whatsappPhoneId })
                             });
-                            const data = await res.json();
+                            let data;
+                            try { data = await res.json(); } catch(e) { data = { error: "Non-JSON response" }; }
                             alert(res.ok ? "Success! Message sent." : `Error: ${JSON.stringify(data)}`);
-                          } catch (e) { alert("Server connection error."); }
+                          } catch (e: any) { alert(`Server connection error: ${e.message}`); }
                         }}
                       >
                         [Run Connection Test]
