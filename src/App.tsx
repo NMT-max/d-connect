@@ -1082,7 +1082,14 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
             // Manual Mode Logic
             const encodedMsg = encodeURIComponent(nextPost.content);
             const url = `https://web.whatsapp.com/send?phone=${nextPost.target}&text=${encodedMsg}`;
-            window.open(url, '_blank');
+            const win = window.open(url, '_blank');
+            
+            if (!win) {
+              setIsAutomating(false);
+              alert('POP-UP BLOCKED: Your browser blocked the WhatsApp tab. Please click the "Pop-up blocked" icon in your URL bar and allow pop-ups for this site.');
+              return;
+            }
+
             onComplete(nextPost.id);
             
             if (pendingPosts.length === 1) {
@@ -1354,7 +1361,14 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                         {window.location.hostname.includes('vercel.app') && (
                           <div className="bg-red-500/20 border border-red-500/50 p-3 rounded-xl mb-3">
                             <p className="text-[10px] text-red-500 font-bold uppercase mb-1">⚠️ Environment Mismatch</p>
-                            <p className="text-[9px] text-slate-400">Cloud API only works in AI Studio. Switch to "Manual" mode for Vercel testing.</p>
+                            <p className="text-[9px] text-slate-400 mb-2">Cloud API only works in the <b>AI Studio Development Preview</b>. This Vercel link is frontend-only.</p>
+                            <a 
+                              href={window.location.href.replace('d-connect-self.vercel.app', 'ais-dev-fnrlt5mucezwyf4nrhznnx-618425769061.asia-southeast1.run.app')}
+                              target="_blank"
+                              className="text-[10px] bg-red-500 text-white px-2 py-1 rounded inline-block font-bold hover:bg-red-600 transition-colors"
+                            >
+                              Open Development Preview
+                            </a>
                           </div>
                         )}
 
