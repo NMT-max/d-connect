@@ -155,6 +155,8 @@ export default function App() {
           ? new Date(post.scheduledAt.seconds * 1000) 
           : (post.scheduledAt instanceof Date ? post.scheduledAt : new Date(post.scheduledAt || Date.now()));
         if (now >= scheduledTime) {
+          if (post.platform === 'whatsapp') return; // Handled by Interactive Queue
+          
           console.log(`Executing targeted task: ${post.id} for ${post.platform}`);
           
           let success = false;
@@ -913,27 +915,45 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
   const isHourlyLimitReached = sentThisHourCount >= hourlyLimit;
   const isLimitReached = isDailyLimitReached || isHourlyLimitReached;
 
+  const [currentAutoTarget, setCurrentAutoTarget] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
+
   // Auto-Automation Logic
   useEffect(() => {
     let timer: any;
+    let countdownInterval: any;
+
     if (isAutomating && pendingPosts.length > 0) {
       if (isDailyLimitReached) {
         setIsAutomating(false);
+        setCurrentAutoTarget(null);
+        setCountdown(null);
         alert(`DAILY LIMIT REACHED (${dailyLimit}). Automation paused to protect your account. Remaining messages will stay in pending for tomorrow.`);
         return;
       }
       
       if (isHourlyLimitReached) {
         setIsAutomating(false);
+        setCurrentAutoTarget(null);
+        setCountdown(null);
         alert(`HOURLY LIMIT REACHED (${hourlyLimit}). Automation paused for 1 hour to prevent flags. Please try again later.`);
         return;
       }
 
-      const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay) * 1000;
-      
+      const nextPost = pendingPosts[0];
+      setCurrentAutoTarget(nextPost.target);
+
+      const delaySeconds = Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay);
+      setCountdown(delaySeconds);
+
+      countdownInterval = setInterval(() => {
+        setCountdown(prev => (prev !== null && prev > 0) ? prev - 1 : 0);
+      }, 1000);
+
       timer = setTimeout(() => {
-        const nextPost = pendingPosts[0];
-        
+        clearInterval(countdownInterval);
+        setCountdown(null);
+
         if (nextPost.mediaUrl) {
           navigator.clipboard.writeText(nextPost.mediaUrl);
         }
@@ -944,21 +964,28 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
         
         if (!win) {
           setIsAutomating(false);
+          setCurrentAutoTarget(null);
           alert('POP-UP BLOCKED: Please allow pop-ups for this site to use automation.');
           return;
         }
 
-        // We mark as complete because we've triggered the window. 
-        // User just needs to press Enter in the new tab.
+        // Mark as complete and move to next
         onComplete(nextPost.id);
         
         if (pendingPosts.length === 1) {
           setIsAutomating(false);
+          setCurrentAutoTarget(null);
         }
-      }, delay);
+      }, delaySeconds * 1000);
+    } else {
+      setCurrentAutoTarget(null);
+      setCountdown(null);
     }
-    return () => clearTimeout(timer);
-  }, [isAutomating, pendingPosts, minDelay, maxDelay, onComplete]);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(countdownInterval);
+    };
+  }, [isAutomating, pendingPosts, minDelay, maxDelay, onComplete, isDailyLimitReached, isHourlyLimitReached, dailyLimit, hourlyLimit]);
 
   // Warm-up logic: Start with 5, add 5 more every day
   const parseSpintax = (text: string) => {
@@ -1168,17 +1195,22 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                 </div>
              </div>
 
-             {isAutomating && (
-               <div className="mb-6 p-6 bg-gold-500/10 border border-gold-500/30 rounded-3xl">
+              {isAutomating && (
+               <div className="mb-6 p-6 bg-gold-500/10 border border-gold-500/30 rounded-3xl relative">
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    <div className="w-1.5 h-1.5 bg-gold-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-1.5 h-1.5 bg-gold-500 rounded-full animate-bounce" style={{ animationDelay: '200ms' }} />
+                    <div className="w-1.5 h-1.5 bg-gold-500 rounded-full animate-bounce" style={{ animationDelay: '400ms' }} />
+                  </div>
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-3 h-3 bg-gold-500 rounded-full animate-ping" />
                       <p className="text-sm font-bold text-gold-500 uppercase tracking-widest">Auto-Sequence Active</p>
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] text-slate-400 font-mono block">Random Delay: {minDelay}-{maxDelay}s</span>
+                      <span className="text-[10px] text-slate-400 font-mono block">Target: {currentAutoTarget || 'Initializing...'}</span>
+                      {countdown !== null && <span className="text-[10px] text-emerald-400 font-bold block animate-pulse">Next window in: {countdown}s</span>}
                       <span className="text-[10px] text-gold-500/80 font-bold block">Sent Today: {sentTodayCount}/{dailyLimit}</span>
-                      <span className="text-[10px] text-slate-500 font-mono block">Sent This Hour: {sentThisHourCount}/{hourlyLimit}</span>
                     </div>
                   </div>
                   <div className="h-1.5 w-full bg-navy-900 rounded-full mb-4 overflow-hidden">
@@ -1187,19 +1219,15 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                        style={{ width: `${Math.min(100, (sentTodayCount / dailyLimit) * 100)}%` }}
                      />
                   </div>
-                  <div className="space-y-3 text-[11px] text-slate-400">
-                    <p className="flex items-center gap-2">
-                       <span className="w-1.5 h-1.5 rounded-full bg-gold-500" />
-                       WhatsApp Web opens in a new tab for each contact.
+                  <div className="bg-navy-900/50 p-4 rounded-2xl border border-gold-500/20 mb-4">
+                    <p className="text-xs text-white font-bold mb-1 italic">🚨 ACTION REQUIRED IN NEW TABS:</p>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Windows will open automatically. You MUST switch to the new tab and press <span className="bg-navy-700 px-1.5 py-0.5 rounded text-gold-500 font-black tracking-widest">ENTER</span> to actually send.
                     </p>
-                    <p className="flex items-center gap-2">
-                       <span className="w-1.5 h-1.5 rounded-full bg-gold-500" />
-                       <span className="text-white font-bold">Action Required:</span> You must press <span className="bg-navy-700 px-1.5 py-0.5 rounded text-gold-500 font-black">ENTER</span> in each WhatsApp tab to send the message.
-                    </p>
-                    <p className="flex items-center gap-2">
-                       <span className="w-1.5 h-1.5 rounded-full bg-gold-500" />
-                       If you have an image, it is copied to your clipboard. Use <span className="text-white font-bold">Ctrl+V</span> if it doesn't appear.
-                    </p>
+                  </div>
+                  <div className="space-y-2 text-[10px] text-slate-500">
+                    <p className="flex items-center gap-2">• Using randomized safety delays ({minDelay}-{maxDelay}s).</p>
+                    <p className="flex items-center gap-2">• Image link copied to clipboard if applicable.</p>
                   </div>
                </div>
              )}

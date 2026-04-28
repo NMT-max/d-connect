@@ -23,11 +23,9 @@ service cloud.firestore {
 
     match /scheduled_posts/{postId} {
       allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
-      allow write: if isSignedIn() && (
-        (request.method == 'create' && incoming().userId == request.auth.uid) ||
-        (request.method == 'update' && existing().userId == request.auth.uid) ||
-        (request.method == 'delete' && existing().userId == request.auth.uid)
-      );
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
     function isValidUserSetting(data) {
