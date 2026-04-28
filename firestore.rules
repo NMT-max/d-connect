@@ -22,7 +22,7 @@ service cloud.firestore {
 
     match /scheduled_posts/{postId} {
       allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
       
       allow create: if isSignedIn() 
         && isValidScheduledPost(incoming());

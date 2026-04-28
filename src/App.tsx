@@ -148,17 +148,18 @@ export default function App() {
           
           let success = false;
           try {
-            // Placeholder: Here you would call the actual API functions based on post.platform
-            // For now we simulate execution and mark as sent
-            if (post.platform === 'email') {
-              // Real Resend Integration logic would go here
-              success = true;
-            } else if (post.platform === 'facebook') {
-              // Meta API logic
-              success = true;
-            } else {
-              success = true; // WhatsApp/Instagram placeholder
-            }
+          // Placeholder: Here you would call the actual API functions based on post.platform
+          // For now we simulate execution and mark as sent
+          if (post.platform === 'email') {
+            // Real Resend Integration logic would go here
+            success = true;
+          } else if (post.platform === 'facebook') {
+            // Meta API logic
+            success = true;
+          } else {
+            // WhatsApp/Instagram require manual interaction via the queue
+            return; 
+          }
 
             if (success) {
               await setDoc(doc(db, 'scheduled_posts', post.id), { status: 'sent', updatedAt: serverTimestamp() }, { merge: true });
@@ -297,13 +298,13 @@ export default function App() {
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">
               <p className="text-xs text-slate-500">Cloud Sync</p>
-              <span className={`text-sm font-medium flex items-center gap-1 ${
+              <div className={`text-sm font-medium flex items-center justify-end gap-1 ${
                 syncStatus === 'real-time' ? 'text-emerald-500' : 
                 syncStatus === 'error' ? 'text-red-500' : 'text-gold-500'
               }`}>
                 {syncStatus === 'real-time' ? <CheckCircle2 size={12} /> : <div className="w-2 h-2 rounded-full bg-current animate-pulse" />}
                 {syncStatus === 'real-time' ? 'Real-time' : syncStatus === 'error' ? 'Sync Error' : 'Connecting...'}
-              </span>
+              </div>
             </div>
             <div className="w-10 h-10 rounded-full border-2 border-navy-700 bg-navy-800 flex items-center justify-center overflow-hidden">
                <img src={user.photoURL || ''} alt="User" />
@@ -320,6 +321,7 @@ export default function App() {
                   onSchedule={saveScheduledPost} 
                   posts={scheduledPosts}
                   deletePost={deletePost}
+                  onComplete={completeTask}
                 />
               )}
               {activeModule === 'email' && <EmailView apiKey={resendApiKey} setApiKey={setResendApiKey} onSave={saveSettings} />}
@@ -441,15 +443,15 @@ function AIView({ prompt, setPrompt, channel, setChannel, language, setLanguage,
   );
 }
 
-  const completeTask = async (id: string) => {
-    try {
-      await setDoc(doc(db, 'scheduled_posts', id), { status: 'sent', updatedAt: serverTimestamp() }, { merge: true });
-    } catch (error) {
-      console.error("Error updating status:", error);
-    }
-  };
+async function completeTask(id: string) {
+  try {
+    await setDoc(doc(db, 'scheduled_posts', id), { status: 'sent', updatedAt: serverTimestamp() }, { merge: true });
+  } catch (error) {
+    console.error("Error updating status:", error);
+  }
+}
 
-  function ScheduleDashboard({ posts, deletePost }: { posts: any[], deletePost: (id: string) => void }) {
+function ScheduleDashboard({ posts, deletePost }: { posts: any[], deletePost: (id: string) => void }) {
   const executeWhatsApp = (post: any) => {
     const encodedMsg = encodeURIComponent(post.content);
     if (post.mediaUrl) {
@@ -835,7 +837,7 @@ function StatCard({ title, value, subValue, icon }: { title: string, value: stri
   );
 }
 
-function WhatsAppView({ onSchedule, posts, deletePost }: { onSchedule: (post: any) => void, posts: any[], deletePost: (id: string) => void }) {
+function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedule: (post: any) => void, posts: any[], deletePost: (id: string) => void, onComplete: (id: string) => void }) {
   const [accountAge, setAccountAge] = useState(1);
   const [contacts, setContacts] = useState<string>('');
   const [rawMessage, setRawMessage] = useState('');
@@ -986,6 +988,11 @@ function WhatsAppView({ onSchedule, posts, deletePost }: { onSchedule: (post: an
               >
                 <Send size={20} /> Deploy Secured Campaign
               </button>
+              <div className="p-4 bg-navy-900/40 rounded-2xl border border-navy-700/50">
+                <p className="text-[10px] text-slate-500 leading-relaxed text-center">
+                  <span className="text-gold-500 font-bold">INFO:</span> WhatsApp Web doesn't support 100% automated sending from browsers. After clicking deploy, your messages will appear in the <span className="text-emerald-500">Smart Queue</span> below. You must click <span className="text-emerald-500">SEND</span> for each recipient to trigger the message.
+                </p>
+              </div>
             </div>
           </section>
 
@@ -1032,6 +1039,7 @@ function WhatsAppView({ onSchedule, posts, deletePost }: { onSchedule: (post: an
                                     navigator.clipboard.writeText(post.mediaUrl);
                                   }
                                   window.open(`https://web.whatsapp.com/send?phone=${post.target}&text=${encodedMsg}`, '_blank');
+                                  onComplete(post.id);
                                 }}
                                 className="px-3 py-2 bg-emerald-500 text-navy-900 text-xs font-black rounded-lg hover:brightness-110 transition-all flex items-center gap-1"
                               >
