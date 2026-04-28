@@ -76,6 +76,8 @@ export default function App() {
   const [fbAccessToken, setFbAccessToken] = useState('');
   const [pageId, setPageId] = useState('');
   const [igAccountId, setIgAccountId] = useState('');
+  const [whatsappToken, setWhatsappToken] = useState('');
+  const [whatsappPhoneId, setWhatsappPhoneId] = useState('');
 
   // Scheduling State
   const [scheduledPosts, setScheduledPosts] = useState<any[]>([]);
@@ -104,6 +106,8 @@ export default function App() {
           setFbAccessToken(data.fbAccessToken || '');
           setPageId(data.pageId || '');
           setIgAccountId(data.igAccountId || '');
+          setWhatsappToken(data.whatsappToken || '');
+          setWhatsappPhoneId(data.whatsappPhoneId || '');
         }
       } catch (error) {
         console.error("Error fetching settings:", error);
@@ -196,7 +200,9 @@ export default function App() {
         resendApiKey,
         fbAccessToken,
         pageId,
-        igAccountId
+        igAccountId,
+        whatsappToken,
+        whatsappPhoneId
       });
       alert('Settings saved to cloud!');
     } catch (error) {
@@ -345,7 +351,16 @@ export default function App() {
                 />
               )}
               {activeModule === 'email' && <EmailView apiKey={resendApiKey} setApiKey={setResendApiKey} onSave={saveSettings} />}
-              {activeModule === 'social' && <SocialView fbToken={fbAccessToken} setFbToken={setFbAccessToken} pageId={pageId} setPageId={setPageId} igId={igAccountId} setIgId={setIgAccountId} onSave={saveSettings} />}
+              {activeModule === 'social' && (
+                <SocialView 
+                  fbToken={fbAccessToken} setFbToken={setFbAccessToken} 
+                  pageId={pageId} setPageId={setPageId} 
+                  igId={igAccountId} setIgId={setIgAccountId} 
+                  waToken={whatsappToken} setWaToken={setWhatsappToken}
+                  waPhoneId={whatsappPhoneId} setWaPhoneId={setWhatsappPhoneId}
+                  onSave={saveSettings} 
+                />
+              )}
               {activeModule === 'ai' && (
                 <AIView 
                   prompt={aiPrompt} setPrompt={setAiPrompt}
@@ -479,14 +494,27 @@ async function completeTask(id: string) {
 }
 
 function ScheduleDashboard({ posts, deletePost }: { posts: any[], deletePost: (id: string) => void }) {
-  const executeWhatsApp = (post: any) => {
-    const encodedMsg = encodeURIComponent(post.content);
-    if (post.mediaUrl) {
-      navigator.clipboard.writeText(post.mediaUrl);
-      alert('Image URL copied to clipboard! Now paste it in the WhatsApp chat.');
+  const executeWhatsApp = async (post: any) => {
+    try {
+      const response = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: post.target,
+          message: post.content,
+          mediaUrl: post.mediaUrl
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        completeTask(post.id);
+        alert('Message sent successfully via API!');
+      } else {
+        alert('API Error: ' + (data.error?.message || data.error || 'Failed to send'));
+      }
+    } catch (e) {
+      alert('Connection Error to Backend.');
     }
-    window.open(`https://web.whatsapp.com/send?phone=${post.target}&text=${encodedMsg}`, '_blank');
-    completeTask(post.id);
   };
 
   return (
@@ -659,7 +687,7 @@ function EmailView({ apiKey, setApiKey, onSave }: any) {
   );
 }
 
-function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, onSave }: any) {
+function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waToken, setWaToken, waPhoneId, setWaPhoneId, onSave }: any) {
   const [content, setContent] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [isPosting, setIsPosting] = useState(false);
@@ -737,21 +765,50 @@ function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, onS
   return (
     <div className="max-w-6xl space-y-8 pb-32">
       {/* Config Bar */}
-      <section className="bg-navy-800 border border-navy-700 rounded-3xl p-6 flex flex-col md:flex-row justify-between items-center gap-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 w-full">
-          <input 
-            type="password" 
-            value={fbToken} 
-            onChange={(e) => setFbToken(e.target.value)} 
-            placeholder="Meta Access Token (v18.0)" 
-            className="bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50 text-sm" 
-          />
-          <div className="flex gap-2">
-             <input type="text" value={pageId} onChange={(e) => setPageId(e.target.value)} placeholder="FB Page ID" className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none text-sm" />
-             <input type="text" value={igId} onChange={(e) => setIgId(e.target.value)} placeholder="IG Account ID" className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none text-sm" />
+      <section className="bg-navy-800 border border-navy-700 rounded-3xl p-6 space-y-6">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-navy-700 pb-4">
+           <h3 className="text-lg font-bold flex items-center gap-2"><Settings size={18} className="text-gold-500" /> API Configuration</h3>
+           <button onClick={onSave} className="bg-gold-500 text-navy-900 px-8 py-2 rounded-xl font-bold hover:scale-105 transition-all text-sm shadow-lg shadow-gold-500/20">Save All Keys</button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <h4 className="text-[10px] uppercase font-black text-slate-500 tracking-widest flex items-center gap-2">
+               <Share2 size={12} /> Meta (FB/IG) Credentials
+            </h4>
+            <input 
+              type="password" 
+              value={fbToken} 
+              onChange={(e) => setFbToken(e.target.value)} 
+              placeholder="Meta Access Token" 
+              className="w-full bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50 text-sm" 
+            />
+            <div className="flex gap-2">
+               <input type="text" value={pageId} onChange={(e) => setPageId(e.target.value)} placeholder="FB Page ID" className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none text-sm" />
+               <input type="text" value={igId} onChange={(e) => setIgId(e.target.value)} placeholder="IG Account ID" className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none text-sm" />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h4 className="text-[10px] uppercase font-black text-slate-500 tracking-widest flex items-center gap-2">
+               <MessageSquare size={12} className="text-emerald-500" /> WhatsApp Business API
+            </h4>
+            <input 
+              type="password" 
+              value={waToken} 
+              onChange={(e) => setWaToken(e.target.value)} 
+              placeholder="WhatsApp System User Token" 
+              className="w-full bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-emerald-500/50 text-sm" 
+            />
+            <input 
+              type="text" 
+              value={waPhoneId} 
+              onChange={(e) => setWaPhoneId(e.target.value)} 
+              placeholder="Phone Number ID" 
+              className="w-full bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-emerald-500/50 text-sm" 
+            />
           </div>
         </div>
-        <button onClick={onSave} className="bg-gold-500 text-navy-900 px-8 py-3 rounded-xl font-bold hover:scale-105 transition-all text-sm shrink-0 shadow-lg shadow-gold-500/20">Save Keys</button>
       </section>
 
       {/* Editor & Post Preview */}
@@ -917,6 +974,7 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
 
   const [currentAutoTarget, setCurrentAutoTarget] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [isSending, setIsSending] = useState(false);
 
   // Auto-Automation Logic
   useEffect(() => {
@@ -954,28 +1012,40 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
         clearInterval(countdownInterval);
         setCountdown(null);
 
-        if (nextPost.mediaUrl) {
-          navigator.clipboard.writeText(nextPost.mediaUrl);
-        }
-
-        const encodedMsg = encodeURIComponent(nextPost.content);
-        const url = `https://web.whatsapp.com/send?phone=${nextPost.target}&text=${encodedMsg}`;
-        const win = window.open(url, '_blank');
-        
-        if (!win) {
-          setIsAutomating(false);
-          setCurrentAutoTarget(null);
-          alert('POP-UP BLOCKED: Please allow pop-ups for this site to use automation.');
-          return;
-        }
-
-        // Mark as complete and move to next
-        onComplete(nextPost.id);
-        
-        if (pendingPosts.length === 1) {
-          setIsAutomating(false);
-          setCurrentAutoTarget(null);
-        }
+        (async () => {
+          setIsSending(true);
+          try {
+            const response = await fetch('/api/whatsapp/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                to: nextPost.target,
+                message: nextPost.content,
+                mediaUrl: nextPost.mediaUrl
+              })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+              onComplete(nextPost.id);
+            } else {
+              console.error("API Error:", data);
+              setIsAutomating(false);
+              alert('WhatsApp API Error: ' + (data.error?.message || data.error || 'Failed to send'));
+            }
+          } catch (e) {
+            console.error("Fetch Error:", e);
+            setIsAutomating(false);
+            alert('Connection Error to Backend. Please ensure settings are correct.');
+          } finally {
+            setIsSending(false);
+            if (pendingPosts.length === 1) {
+              setIsAutomating(false);
+              setCurrentAutoTarget(null);
+            }
+          }
+        })();
       }, delaySeconds * 1000);
     } else {
       setCurrentAutoTarget(null);
@@ -1220,24 +1290,18 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                      />
                   </div>
                   <div className="bg-navy-900/50 p-4 rounded-2xl border border-gold-500/20 mb-4">
-                    <p className="text-xs text-white font-bold mb-1 italic">🚨 MANUAL ACTION REQUIRED:</p>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Due to browser security, you must manually press <span className="bg-navy-700 px-1.5 py-0.5 rounded text-gold-500 font-black tracking-widest">ENTER</span> in the WhatsApp tab to send. 
+                    <p className="text-xs text-white font-bold mb-1 italic">✅ FULLY AUTOMATED SYSTEM:</p>
+                    <p className="text-[11px] text-slate-400 leading-relaxed uppercase tracking-tighter">
+                      Connected to WhatsApp Business API. No manual intervention required. 
                     </p>
                     <div className="mt-2 space-y-1">
-                      <p className="text-[10px] text-emerald-500 flex items-center gap-1">
-                        <Check size={10} /> Tab will open automatically.
-                      </p>
-                      <p className="text-[10px] text-emerald-500 flex items-center gap-1">
-                        <Check size={10} /> Message is pre-filled.
-                      </p>
-                      <p className="text-[10px] text-emerald-500 flex items-center gap-1">
-                        <Check size={10} /> Image link (if any) copied to clipboard.
+                      <p className="text-[10px] text-emerald-500 flex items-center gap-1 font-bold">
+                         Cloud API Execution Active
                       </p>
                     </div>
                   </div>
                   <div className="space-y-2 text-[10px] text-slate-500">
-                    <p className="flex items-center gap-2">• Using randomized safety delays ({minDelay}-{maxDelay}s) to prevent bans.</p>
+                    <p className="flex items-center gap-2">• Running in background via Business Channel.</p>
                     <p className="flex items-center gap-2">• Daily & Hourly limits are active.</p>
                   </div>
                </div>
@@ -1266,13 +1330,26 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                           {post.status === 'pending' ? (
                             <div className="flex gap-1">
                                <button 
-                                onClick={() => {
-                                  const encodedMsg = encodeURIComponent(post.content);
-                                  if (post.mediaUrl) {
-                                    navigator.clipboard.writeText(post.mediaUrl);
+                                onClick={async () => {
+                                  try {
+                                    const response = await fetch('/api/whatsapp/send', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                        to: post.target,
+                                        message: post.content,
+                                        mediaUrl: post.mediaUrl
+                                      })
+                                    });
+                                    if (response.ok) {
+                                      onComplete(post.id);
+                                    } else {
+                                      const data = await response.json();
+                                      alert('Error: ' + (data.error?.message || 'Failed to send'));
+                                    }
+                                  } catch (e) {
+                                    alert('Connection Error');
                                   }
-                                  window.open(`https://web.whatsapp.com/send?phone=${post.target}&text=${encodedMsg}`, '_blank');
-                                  onComplete(post.id);
                                 }}
                                 className="px-3 py-2 bg-emerald-500 text-navy-900 text-xs font-black rounded-lg hover:brightness-110 transition-all flex items-center gap-1"
                               >
