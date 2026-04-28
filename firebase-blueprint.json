@@ -11,6 +11,7 @@
         "time": { "type": "string", "format": "date-time", "description": "Scheduled time." },
         "status": { "type": "string", "enum": ["pending", "sent", "failed"], "description": "Execution status." },
         "userId": { "type": "string", "description": "The UID of the user who scheduled it." },
+        "mediaUrl": { "type": "string", "description": "Optional image/media URL." },
         "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp." },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp." }
       },
