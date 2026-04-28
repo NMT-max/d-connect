@@ -119,8 +119,9 @@ export default function App() {
       const posts = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       // Sort locally to ensure consistency without manual index creation
       posts.sort((a: any, b: any) => {
-        const timeA = (a.createdAt as any)?.seconds || 0;
-        const timeB = (b.createdAt as any)?.seconds || 0;
+        // Use current time for newly created posts that haven't received server timestamp yet
+        const timeA = (a.createdAt as any)?.seconds || Date.now() / 1000;
+        const timeB = (b.createdAt as any)?.seconds || Date.now() / 1000;
         return timeB - timeA;
       });
       setScheduledPosts(posts);
@@ -267,7 +268,14 @@ export default function App() {
         </div>
         <nav className="flex-1 px-3 space-y-1 mt-4">
           <NavItem icon={<BarChart3 size={20} />} label="Dashboard" active={activeModule === 'dashboard'} onClick={() => setActiveModule('dashboard')} isOpen={isSidebarOpen} />
-          <NavItem icon={<MessageSquare size={20} />} label="WhatsApp Planner" active={activeModule === 'whatsapp'} onClick={() => setActiveModule('whatsapp')} isOpen={isSidebarOpen} />
+          <NavItem 
+            icon={<MessageSquare size={20} />} 
+            label="WhatsApp Planner" 
+            active={activeModule === 'whatsapp'} 
+            onClick={() => setActiveModule('whatsapp')} 
+            isOpen={isSidebarOpen} 
+            badge={scheduledPosts.filter(p => p.platform === 'whatsapp' && p.status === 'pending').length || 0}
+          />
           <NavItem icon={<Mail size={20} />} label="Email Marketing" active={activeModule === 'email'} onClick={() => setActiveModule('email')} isOpen={isSidebarOpen} />
           <NavItem icon={<Share2 size={20} />} label="Social Hub" active={activeModule === 'social'} onClick={() => setActiveModule('social')} isOpen={isSidebarOpen} />
           <NavItem icon={<Sparkles size={20} />} label="AI Writer" active={activeModule === 'ai'} onClick={() => setActiveModule('ai')} isOpen={isSidebarOpen} />
@@ -803,7 +811,7 @@ function DashboardView({ posts, deletePost }: any) {
   );
 }
 
-function NavItem({ icon, label, active, onClick, isOpen }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void, isOpen: boolean }) {
+function NavItem({ icon, label, active, onClick, isOpen, badge }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void, isOpen: boolean, badge?: number }) {
   return (
     <button
       onClick={onClick}
@@ -816,7 +824,16 @@ function NavItem({ icon, label, active, onClick, isOpen }: { icon: React.ReactNo
       <div className={`${active ? 'text-gold-500' : 'group-hover:text-gold-400'} transition-colors`}>
         {icon}
       </div>
-      {isOpen && <span className="font-medium text-sm whitespace-nowrap">{label}</span>}
+      {isOpen && (
+        <div className="flex-1 flex items-center justify-between overflow-hidden">
+          <span className="font-medium text-sm whitespace-nowrap">{label}</span>
+          {badge && badge > 0 ? (
+            <span className="bg-emerald-500 text-navy-900 text-[10px] font-black px-1.5 py-0.5 rounded-md animate-pulse">
+              {badge}
+            </span>
+          ) : null}
+        </div>
+      )}
       {active && <div className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-gold-500 rounded-r-full shadow-[0_0_8px_rgba(197,160,89,0.5)]" />}
     </button>
   );
@@ -986,11 +1003,11 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                 onClick={handleScheduleMarketing}
                 className="w-full py-4 gold-gradient text-navy-900 font-bold rounded-2xl shadow-xl shadow-gold-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-3"
               >
-                <Send size={20} /> Deploy Secured Campaign
+                <Send size={20} /> Deploy Data to Queue
               </button>
-              <div className="p-4 bg-navy-900/40 rounded-2xl border border-navy-700/50">
-                <p className="text-[10px] text-slate-500 leading-relaxed text-center">
-                  <span className="text-gold-500 font-bold">INFO:</span> WhatsApp Web doesn't support 100% automated sending from browsers. After clicking deploy, your messages will appear in the <span className="text-emerald-500">Smart Queue</span> below. You must click <span className="text-emerald-500">SEND</span> for each recipient to trigger the message.
+              <div className="p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/20">
+                <p className="text-[10px] text-slate-400 leading-relaxed text-center">
+                  <span className="text-emerald-500 font-bold">NEXT STEP:</span> Browser security prevents auto-sending. After deployment, scroll down to the <span className="text-emerald-500 font-bold">Smart Queue</span> and click <span className="text-emerald-500 font-bold">SEND</span> for each contact.
                 </p>
               </div>
             </div>
