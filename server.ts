@@ -22,15 +22,14 @@ async function startServer() {
       return res.status(400).json({ error: "WhatsApp API credentials missing. Please set them in Social Hub settings." });
     }
 
+    // Clean phone number: remove any non-digit characters
+    const cleanTo = to.replace(/\D/g, "");
+
     try {
-      // Note: For Cloud API, you usually need to use a Template if it's the first message
-      // But for testing/open window, we try a text message.
-      // If it fails, it might need a Template.
-      
       const payload: any = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        to: to,
+        to: cleanTo,
         type: "text",
         text: { body: message }
       };

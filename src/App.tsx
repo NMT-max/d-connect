@@ -348,6 +348,8 @@ export default function App() {
                   posts={scheduledPosts}
                   deletePost={deletePost}
                   onComplete={completeTask}
+                  whatsappToken={whatsappToken}
+                  whatsappPhoneId={whatsappPhoneId}
                 />
               )}
               {activeModule === 'email' && <EmailView apiKey={resendApiKey} setApiKey={setResendApiKey} onSave={saveSettings} />}
@@ -370,7 +372,14 @@ export default function App() {
                   onSchedule={saveScheduledPost}
                 />
               )}
-              {activeModule === 'settings' && <ScheduleDashboard posts={scheduledPosts} deletePost={deletePost} />}
+              {activeModule === 'settings' && (
+                <ScheduleDashboard 
+                  posts={scheduledPosts} 
+                  deletePost={deletePost} 
+                  whatsappToken={whatsappToken}
+                  whatsappPhoneId={whatsappPhoneId}
+                />
+              )}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -493,7 +502,7 @@ async function completeTask(id: string) {
   }
 }
 
-function ScheduleDashboard({ posts, deletePost }: { posts: any[], deletePost: (id: string) => void }) {
+function ScheduleDashboard({ posts, deletePost, whatsappToken, whatsappPhoneId }: { posts: any[], deletePost: (id: string) => void, whatsappToken: string, whatsappPhoneId: string }) {
   const executeWhatsApp = async (post: any) => {
     try {
       const response = await fetch('/api/whatsapp/send', {
@@ -503,8 +512,8 @@ function ScheduleDashboard({ posts, deletePost }: { posts: any[], deletePost: (i
           to: post.target,
           message: post.content,
           mediaUrl: post.mediaUrl,
-          token: (window as any).waToken, // Fallback mechanism or use context
-          phoneId: (window as any).waPhoneId
+          token: whatsappToken,
+          phoneId: whatsappPhoneId
         })
       });
       const data = await response.json();
@@ -938,7 +947,7 @@ function StatCard({ title, value, subValue, icon }: { title: string, value: stri
   );
 }
 
-function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedule: (post: any) => void, posts: any[], deletePost: (id: string) => void, onComplete: (id: string) => void }) {
+function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken, whatsappPhoneId }: { onSchedule: (post: any) => void, posts: any[], deletePost: (id: string) => void, onComplete: (id: string) => void, whatsappToken: string, whatsappPhoneId: string }) {
   const [accountAge, setAccountAge] = useState(1);
   const [contacts, setContacts] = useState<string>('');
   const [rawMessage, setRawMessage] = useState('');
@@ -947,6 +956,7 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
   const [maxDelay, setMaxDelay] = useState(60);
   const [scheduledTime, setScheduledTime] = useState('');
   const [isAutomating, setIsAutomating] = useState(false);
+  const [lastApiStatus, setLastApiStatus] = useState<{success: boolean, message: string} | null>(null);
 
   const whatsappPosts = posts.filter(p => p.platform === 'whatsapp');
   const pendingPosts = whatsappPosts.filter(p => p.status === 'pending');
@@ -1033,10 +1043,13 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
             
             if (response.ok) {
               onComplete(nextPost.id);
+              setLastApiStatus({ success: true, message: 'Message sent successfully.' });
             } else {
               console.error("API Error:", data);
               setIsAutomating(false);
-              alert('WhatsApp API Error: ' + (data.error?.message || data.error || 'Failed to send'));
+              const errMsg = data.error?.message || data.error?.error_user_msg || data.error || 'Failed to send';
+              setLastApiStatus({ success: false, message: errMsg });
+              alert('WhatsApp API Error: ' + errMsg);
             }
           } catch (e) {
             console.error("Fetch Error:", e);
@@ -1294,13 +1307,17 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                      />
                   </div>
                   <div className="bg-navy-900/50 p-4 rounded-2xl border border-gold-500/20 mb-4">
-                    <p className="text-xs text-white font-bold mb-1 italic">✅ FULLY AUTOMATED SYSTEM:</p>
-                    <p className="text-[11px] text-slate-400 leading-relaxed uppercase tracking-tighter">
-                      Connected to WhatsApp Business API. No manual intervention required. 
-                    </p>
-                    <div className="mt-2 space-y-1">
+                    <p className="text-xs text-white font-bold mb-1 italic">✅ FULLY AUTOMATED SYSTEM (CLOUD API):</p>
+                    
+                    {lastApiStatus && (
+                      <div className={`mt-2 p-2 rounded text-[10px] font-mono mb-2 ${lastApiStatus.success ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400 border border-red-500/30'}`}>
+                        {lastApiStatus.success ? '✓ ' : '✗ ERROR: '}{lastApiStatus.message}
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
                       <p className="text-[10px] text-emerald-500 flex items-center gap-1 font-bold">
-                         Cloud API Execution Active
+                         {isSending ? 'Sending now...' : 'Channel Connected & Ready'}
                       </p>
                     </div>
                   </div>
@@ -1342,7 +1359,9 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                                       body: JSON.stringify({
                                         to: post.target,
                                         message: post.content,
-                                        mediaUrl: post.mediaUrl
+                                        mediaUrl: post.mediaUrl,
+                                        token: whatsappToken,
+                                        phoneId: whatsappPhoneId
                                       })
                                     });
                                     if (response.ok) {
