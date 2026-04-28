@@ -475,7 +475,10 @@ function AIView({ prompt, setPrompt, channel, setChannel, language, setLanguage,
                 </td>
                 <td className="px-8 py-4 capitalize font-medium text-slate-400">{post.platform}</td>
                 <td className="px-8 py-4 text-xs font-mono text-slate-500">{post.target || 'N/A'}</td>
-                <td className="px-8 py-4 max-w-[200px] truncate text-slate-300 italic">"{post.content}"</td>
+                <td className="px-8 py-4 max-w-[200px] truncate text-slate-300 italic">
+                  {post.mediaUrl && <span className="inline-block w-2 h-2 rounded-full bg-gold-500 mr-2" title="Has Media Attachment" />}
+                  "{post.content}"
+                </td>
                 <td className="px-8 py-4">
                   <div className="flex gap-2">
                     {post.platform === 'whatsapp' && post.status === 'pending' && (
