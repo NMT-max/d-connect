@@ -14,12 +14,12 @@ async function startServer() {
 
   // WhatsApp API Proxy Route
   app.post("/api/whatsapp/send", async (req, res) => {
-    const { to, message, mediaUrl } = req.body;
-    const token = process.env.WHATSAPP_TOKEN;
-    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const { to, message, mediaUrl, token: bodyToken, phoneId: bodyPhoneId } = req.body;
+    const token = bodyToken || process.env.WHATSAPP_TOKEN;
+    const phoneId = bodyPhoneId || process.env.WHATSAPP_PHONE_NUMBER_ID;
 
     if (!token || !phoneId) {
-      return res.status(500).json({ error: "WhatsApp API credentials not configured on server." });
+      return res.status(400).json({ error: "WhatsApp API credentials missing. Please set them in Social Hub settings." });
     }
 
     try {

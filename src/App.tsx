@@ -502,7 +502,9 @@ function ScheduleDashboard({ posts, deletePost }: { posts: any[], deletePost: (i
         body: JSON.stringify({
           to: post.target,
           message: post.content,
-          mediaUrl: post.mediaUrl
+          mediaUrl: post.mediaUrl,
+          token: (window as any).waToken, // Fallback mechanism or use context
+          phoneId: (window as any).waPhoneId
         })
       });
       const data = await response.json();
@@ -1021,7 +1023,9 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
               body: JSON.stringify({
                 to: nextPost.target,
                 message: nextPost.content,
-                mediaUrl: nextPost.mediaUrl
+                mediaUrl: nextPost.mediaUrl,
+                token: whatsappToken,
+                phoneId: whatsappPhoneId
               })
             });
             
