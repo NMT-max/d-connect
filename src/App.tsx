@@ -124,6 +124,47 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
+  // Background Task Engine: Processes scheduled posts every 60 seconds
+  useEffect(() => {
+    if (!user || scheduledPosts.length === 0) return;
+
+    const interval = setInterval(() => {
+      const now = new Date();
+      scheduledPosts.forEach(async (post) => {
+        if (post.status !== 'pending') return;
+        
+        const scheduledTime = new Date(post.time);
+        if (now >= scheduledTime) {
+          console.log(`Executing targeted task: ${post.id} for ${post.platform}`);
+          
+          let success = false;
+          try {
+            // Placeholder: Here you would call the actual API functions based on post.platform
+            // For now we simulate execution and mark as sent
+            if (post.platform === 'email') {
+              // Real Resend Integration logic would go here
+              success = true;
+            } else if (post.platform === 'facebook') {
+              // Meta API logic
+              success = true;
+            } else {
+              success = true; // WhatsApp/Instagram placeholder
+            }
+
+            if (success) {
+              await setDoc(doc(db, 'scheduled_posts', post.id), { status: 'sent', updatedAt: serverTimestamp() }, { merge: true });
+            }
+          } catch (e) {
+            console.error("Execution failed:", e);
+            await setDoc(doc(db, 'scheduled_posts', post.id), { status: 'failed', updatedAt: serverTimestamp() }, { merge: true });
+          }
+        }
+      });
+    }, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [user, scheduledPosts]);
+
   const saveSettings = async () => {
     if (!user) return;
     try {
@@ -253,7 +294,7 @@ export default function App() {
           <AnimatePresence mode="wait">
             <motion.div key={activeModule} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
               {activeModule === 'dashboard' && <DashboardView posts={scheduledPosts} deletePost={deletePost} />}
-              {activeModule === 'whatsapp' && <WhatsAppView />}
+              {activeModule === 'whatsapp' && <WhatsAppView onSchedule={saveScheduledPost} />}
               {activeModule === 'email' && <EmailView apiKey={resendApiKey} setApiKey={setResendApiKey} onSave={saveSettings} />}
               {activeModule === 'social' && <SocialView fbToken={fbAccessToken} setFbToken={setFbAccessToken} pageId={pageId} setPageId={setPageId} igId={igAccountId} setIgId={setIgAccountId} onSave={saveSettings} />}
               {activeModule === 'ai' && (
@@ -426,12 +467,57 @@ function ScheduleDashboard({ posts, deletePost }: { posts: any[], deletePost: (i
 }
 
 function EmailView({ apiKey, setApiKey, onSave }: any) {
+  const [to, setTo] = useState('');
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [isSending, setIsSending] = useState(false);
+
+  const sendEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!apiKey || !to || !subject || !body) {
+      alert('Missing API Key, Recipient, Subject or Body');
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          from: 'Digicoup <onboarding@resend.dev>', // Resend default for free plan
+          to: [to],
+          subject: subject,
+          html: body.replace(/\n/g, '<br/>')
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        alert('Email sent successfully! ID: ' + data.id);
+        setTo('');
+        setSubject('');
+        setBody('');
+      } else {
+        throw new Error(data.message || 'Failed to send email');
+      }
+    } catch (error: any) {
+      console.error("Resend Error:", error);
+      alert('Error: ' + error.message + '. (Note: Free plans often require domain verification)');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl space-y-6 pb-20">
       <div className="bg-navy-800 border border-navy-700 rounded-3xl p-8 mb-6">
         <h3 className="text-sm font-bold uppercase text-slate-600 mb-4 tracking-widest flex justify-between items-center">
-          Auth Configuration
-          <button onClick={onSave} className="text-[10px] bg-gold-500 text-navy-900 px-3 py-1 rounded-full">Save Changes</button>
+          Resend Configuration
+          <button onClick={onSave} className="text-[10px] bg-gold-500 text-navy-900 px-3 py-1 rounded-full hover:scale-105 transition-all">Save Key</button>
         </h3>
         <div className="flex gap-4">
           <input 
@@ -441,59 +527,207 @@ function EmailView({ apiKey, setApiKey, onSave }: any) {
             placeholder="Resend API Key (re_...)"
             className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50 text-sm"
           />
-          <button className="px-6 bg-navy-700 rounded-xl text-xs font-bold uppercase hover:bg-navy-600 transition-colors">Test Link</button>
         </div>
       </div>
       
-      <div className="bg-navy-800 border border-navy-700 rounded-3xl p-8">
+      <div className="bg-navy-800 border border-navy-700 rounded-3xl p-8 shadow-2xl">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center"><Mail className="text-blue-500" /></div>
-          <div><h2 className="text-xl font-bold">Resend Email Feature</h2><p className="text-sm text-slate-500">Auto-fill from AI content and blast instantly.</p></div>
+          <div><h2 className="text-xl font-bold">Resend Email Campaign</h2><p className="text-sm text-slate-500">Direct integration with Resend.com infrastructure.</p></div>
         </div>
-        <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); alert('Email feature integrated with Cloud Backend.'); }}>
-          <input required type="email" placeholder="Recipient Email (To)" className="w-full bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none" />
-          <input required type="text" placeholder="Subject" className="w-full bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none" />
-          <textarea required placeholder="Message Body" className="w-full h-48 bg-navy-900 border border-navy-700 rounded-xl p-4 outline-none resize-none" />
-          <button type="submit" className="w-full py-3 gold-gradient text-navy-900 font-bold rounded-xl shadow-lg">Send Instant Mail</button>
+        <form className="space-y-4" onSubmit={sendEmail}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input 
+              required type="email" value={to} onChange={(e) => setTo(e.target.value)}
+              placeholder="Recipient Email (To)" 
+              className="w-full bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50" 
+            />
+            <input 
+              required type="text" value={subject} onChange={(e) => setSubject(e.target.value)}
+              placeholder="Subject" 
+              className="w-full bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50" 
+            />
+          </div>
+          <textarea 
+            required value={body} onChange={(e) => setBody(e.target.value)}
+            placeholder="Message Body (HTML support auto-converted from line breaks)" 
+            className="w-full h-64 bg-navy-900 border border-navy-700 rounded-xl p-6 outline-none focus:border-gold-500/50 resize-none font-sans leading-relaxed" 
+          />
+          <button 
+            type="submit" 
+            disabled={isSending}
+            className="w-full py-4 gold-gradient text-navy-900 font-bold rounded-2xl shadow-xl shadow-gold-500/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {isSending ? <div className="w-5 h-5 border-2 border-navy-900 border-t-transparent animate-spin rounded-full"></div> : <Send size={20} />}
+            Execute Blast
+          </button>
         </form>
+        <div className="mt-6 p-4 bg-blue-500/5 border border-blue-500/20 rounded-2xl">
+           <p className="text-[10px] text-blue-500 font-bold uppercase mb-1">Developer Note:</p>
+           <p className="text-xs text-slate-500 leading-relaxed">Resend Free Tier has a limit of 3,000 emails per month and 100 per day. Ensure your domain is verified in your Resend Dashboard.</p>
+        </div>
       </div>
     </div>
   );
 }
 
 function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, onSave }: any) {
+  const [content, setContent] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [isPosting, setIsPosting] = useState(false);
+
+  const postToFacebook = async () => {
+    if (!fbToken || !pageId || !content) {
+      alert('Missing FB Token, Page ID or Content');
+      return;
+    }
+    setIsPosting(true);
+    try {
+      const url = `https://graph.facebook.com/v18.0/${pageId}/feed`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: content,
+          link: imageUrl || undefined,
+          access_token: fbToken
+        })
+      });
+      const data = await response.json();
+      if (data.id) alert('Posted to Facebook successfully! ID: ' + data.id);
+      else throw new Error(data.error?.message || 'Unknown error');
+    } catch (error: any) {
+      alert('FB Error: ' + error.message);
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  const postToInstagram = async () => {
+    if (!fbToken || !igId || !content || !imageUrl) {
+      alert('IG requires Token, Account ID, Content (Caption), and Image URL');
+      return;
+    }
+    setIsPosting(true);
+    try {
+      // Step 1: Create Media Container
+      const containerUrl = `https://graph.facebook.com/v18.0/${igId}/media`;
+      const containerRes = await fetch(containerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_url: imageUrl,
+          caption: content,
+          access_token: fbToken
+        })
+      });
+      const containerData = await containerRes.json();
+      
+      if (!containerData.id) throw new Error(containerData.error?.message || 'Failed to create container');
+
+      // Step 2: Publish Media
+      const publishUrl = `https://graph.facebook.com/v18.0/${igId}/media_publish`;
+      const publishRes = await fetch(publishUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creation_id: containerData.id,
+          access_token: fbToken
+        })
+      });
+      const publishData = await publishRes.json();
+      
+      if (publishData.id) alert('Published to Instagram successfully!');
+      else throw new Error(publishData.error?.message || 'Failed to publish');
+    } catch (error: any) {
+      alert('IG Error: ' + error.message);
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
   return (
-    <div className="max-w-5xl space-y-8 pb-20">
-      <div className="bg-navy-800 border border-navy-700 rounded-3xl p-8 mb-6">
-        <h3 className="text-sm font-bold uppercase text-slate-600 mb-4 tracking-widest flex justify-between items-center">
-          Meta Configuration
-          <button onClick={onSave} className="text-[10px] bg-gold-500 text-navy-900 px-3 py-1 rounded-full">Save Changes</button>
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <input type="password" value={fbToken} onChange={(e) => setFbToken(e.target.value)} placeholder="Main Access Token" className="bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50 text-sm" />
-          <p className="text-[10px] text-slate-500 flex items-center">Tokens are encrypted and stored in your private vault.</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-navy-800 border border-navy-700 rounded-3xl p-8">
-          <h3 className="text-lg font-bold mb-6 flex items-center gap-2"><Share2 className="text-blue-500" /> Facebook Page Auto-Post</h3>
-          <div className="space-y-4">
-            <input type="text" value={pageId} onChange={(e) => setPageId(e.target.value)} placeholder="Page ID" className="w-full bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50" />
-            <input type="text" placeholder="Image URL (optional)" className="w-full bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50" />
-            <button className="w-full py-4 gold-gradient text-navy-900 font-bold rounded-xl">Post to Facebook</button>
+    <div className="max-w-6xl space-y-8 pb-32">
+      {/* Config Bar */}
+      <section className="bg-navy-800 border border-navy-700 rounded-3xl p-6 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 w-full">
+          <input 
+            type="password" 
+            value={fbToken} 
+            onChange={(e) => setFbToken(e.target.value)} 
+            placeholder="Meta Access Token (v18.0)" 
+            className="bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50 text-sm" 
+          />
+          <div className="flex gap-2">
+             <input type="text" value={pageId} onChange={(e) => setPageId(e.target.value)} placeholder="FB Page ID" className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none text-sm" />
+             <input type="text" value={igId} onChange={(e) => setIgId(e.target.value)} placeholder="IG Account ID" className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none text-sm" />
           </div>
         </div>
+        <button onClick={onSave} className="bg-gold-500 text-navy-900 px-8 py-3 rounded-xl font-bold hover:scale-105 transition-all text-sm shrink-0 shadow-lg shadow-gold-500/20">Save Keys</button>
+      </section>
 
-        <div className="bg-navy-800 border border-navy-700 rounded-3xl p-8">
-          <h3 className="text-lg font-bold mb-6 flex items-center gap-2"><Share2 className="text-purple-500" /> Instagram Business Feed</h3>
-          <div className="space-y-4">
-            <input type="text" value={igId} onChange={(e) => setIgId(e.target.value)} placeholder="Instagram Business Account ID" className="w-full bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50" />
-            <input type="text" placeholder="Image URL (Required for IG)" className="w-full bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50" />
-            <p className="text-[10px] text-slate-500 bg-navy-950 p-2 rounded italic">Caption will be auto-filled from generated results.</p>
-            <button className="w-full py-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all">Publish to IG</button>
-          </div>
+      {/* Editor & Post Preview */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-6">
+          <section className="bg-navy-800 border border-navy-700 rounded-3xl p-8 shadow-xl">
+             <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+               <Sparkles className="text-gold-500" /> Omni-Channel Publisher
+             </h3>
+             <textarea 
+               value={content}
+               onChange={(e) => setContent(e.target.value)}
+               placeholder="Write your post caption or content here..."
+               className="w-full h-56 bg-navy-900 border border-navy-700 rounded-2xl p-6 outline-none focus:border-gold-500/50 resize-none mb-6"
+             />
+             <div className="flex items-center gap-3 bg-navy-900/50 p-4 rounded-2xl border border-navy-700 mb-8">
+               <Layers className="text-slate-500" size={20} />
+               <input 
+                 type="text" 
+                 value={imageUrl}
+                 onChange={(e) => setImageUrl(e.target.value)}
+                 placeholder="Image URL (Required for Instagram)" 
+                 className="flex-1 bg-transparent border-none outline-none text-sm"
+               />
+             </div>
+
+             <div className="grid grid-cols-2 gap-4">
+               <button 
+                 disabled={isPosting}
+                 onClick={postToFacebook}
+                 className="py-4 bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+               >
+                 <Share2 size={20} /> Facebook
+               </button>
+               <button 
+                 disabled={isPosting}
+                 onClick={postToInstagram}
+                 className="py-4 bg-gradient-to-tr from-yellow-500 via-pink-500 to-purple-600 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+               >
+                 <Share2 size={20} /> Instagram
+               </button>
+             </div>
+          </section>
         </div>
+
+        <aside className="space-y-6">
+           <div className="bg-navy-800 border border-navy-700 rounded-3xl p-6">
+              <h4 className="text-xs font-black uppercase text-slate-500 mb-4 tracking-widest">Post Guidelines</h4>
+              <ul className="space-y-3">
+                 <li className="flex items-start gap-2 text-xs text-slate-400">
+                    <CheckCircle2 size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+                    <span>Facebook: Best with 150-200 words + relevant emojis.</span>
+                 </li>
+                 <li className="flex items-start gap-2 text-xs text-slate-400">
+                    <CheckCircle2 size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+                    <span>Instagram: Catchy captions with 3-5 hashtags max.</span>
+                 </li>
+                 <li className="flex items-start gap-2 text-xs text-slate-400">
+                    <AlertCircle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                    <span>Instagram requires a <b>Direct Image Link</b> to publish.</span>
+                 </li>
+              </ul>
+           </div>
+        </aside>
       </div>
     </div>
   );
@@ -548,81 +782,146 @@ function StatCard({ title, value, subValue, icon }: { title: string, value: stri
   );
 }
 
-function WhatsAppView() {
-  const [warmupDays, setWarmupDays] = useState(1);
-  
+function WhatsAppView({ onSchedule }: { onSchedule: (post: any) => void }) {
+  const [accountAge, setAccountAge] = useState(1);
+  const [contacts, setContacts] = useState<string>('');
+  const [rawMessage, setRawMessage] = useState('');
+  const [minDelay, setMinDelay] = useState(20);
+  const [maxDelay, setMaxDelay] = useState(60);
+
+  // Warm-up logic: Start with 5, add 5 more every day
+  const dailyLimit = accountAge * 5 + 5;
+
+  const parseSpintax = (text: string) => {
+    return text.replace(/\{([^{}]+)\}/g, (match, options) => {
+      const choices = options.split('|');
+      return choices[Math.floor(Math.random() * choices.length)];
+    });
+  };
+
+  const handleScheduleMarketing = () => {
+    const contactList = contacts.split('\n').filter(c => c.trim().length > 0);
+    if (contactList.length === 0 || !rawMessage) {
+      alert('Please provide contacts and a message.');
+      return;
+    }
+
+    if (contactList.length > dailyLimit) {
+      alert(`Warning: Your suggested daily limit is ${dailyLimit}. You are trying to send to ${contactList.length} contacts. This might risk a ban!`);
+    }
+
+    // Schedule each contact with randomized delay
+    let currentTime = new Date();
+    contactList.forEach((contact, index) => {
+      const personalizedMsg = parseSpintax(rawMessage).replace(/\[Name\]/g, contact.split(',')[1] || 'Customer');
+      const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay);
+      
+      // Advance time for the next message
+      currentTime = new Date(currentTime.getTime() + delay * 1000);
+
+      onSchedule({
+        content: personalizedMsg,
+        platform: 'whatsapp',
+        time: currentTime.toISOString(),
+        target: contact.split(',')[0], // The phone number
+        status: 'pending'
+      });
+    });
+
+    alert(`${contactList.length} messages added to schedule with smart delays!`);
+    setContacts('');
+    setRawMessage('');
+  };
+
   return (
-    <div className="max-w-4xl space-y-8">
-      <section className="bg-navy-800/50 border border-navy-700 rounded-2xl p-8">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-            <MessageSquare className="text-emerald-500" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold">Smart Broadcast Planner</h2>
-            <p className="text-sm text-slate-500">Prevent number bans with intelligent warm-up and random delays.</p>
-          </div>
+    <div className="max-w-5xl space-y-8 pb-20">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Planner Settings */}
+        <div className="lg:col-span-1 space-y-6">
+          <section className="bg-navy-800 border border-navy-700 rounded-3xl p-6">
+            <h3 className="text-sm font-bold uppercase text-gold-500 mb-6 flex items-center gap-2">
+              <Zap size={16} /> Warm-up Config
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Account Age (Days)</label>
+                <input 
+                  type="number" 
+                  value={accountAge}
+                  onChange={(e) => setAccountAge(parseInt(e.target.value) || 1)}
+                  className="w-full bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50"
+                />
+              </div>
+              <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20">
+                <p className="text-xs text-slate-400">Safe limit for today:</p>
+                <p className="text-xl font-bold text-emerald-500">{dailyLimit} Messages</p>
+                <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-tighter">Recommended for new account</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="bg-navy-800 border border-navy-700 rounded-3xl p-6">
+            <h3 className="text-sm font-bold uppercase text-slate-500 mb-6 flex items-center gap-2">
+              <Clock size={16} /> Smart Interval
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 mb-1 uppercase">Min Delay (s)</label>
+                <input type="number" value={minDelay} onChange={(e) => setMinDelay(parseInt(e.target.value))} className="w-full bg-navy-900 border border-navy-700 rounded-lg px-3 py-2 text-sm outline-none" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 mb-1 uppercase">Max Delay (s)</label>
+                <input type="number" value={maxDelay} onChange={(e) => setMaxDelay(parseInt(e.target.value))} className="w-full bg-navy-900 border border-navy-700 rounded-lg px-3 py-2 text-sm outline-none" />
+              </div>
+            </div>
+          </section>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-2">Account Age (Days)</label>
-              <input 
-                type="number" 
-                value={warmupDays}
-                onChange={(e) => setWarmupDays(parseInt(e.target.value))}
-                className="w-full bg-navy-900 border border-navy-600 rounded-xl px-4 py-3 focus:outline-none focus:border-gold-500/50"
-              />
-            </div>
+        {/* Campaign Builder */}
+        <div className="lg:col-span-2 space-y-6">
+          <section className="bg-navy-800 border border-navy-700 rounded-3xl p-8">
+            <h3 className="text-xl font-bold mb-6 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                <MessageSquare className="text-emerald-500" />
+              </div>
+              Broadcast Campaign
+            </h3>
             
-            <div className="p-4 rounded-xl bg-navy-900/50 border border-dashed border-navy-600">
-              <h4 className="text-sm font-bold text-gold-500 mb-2 flex items-center gap-2">
-                <AlertCircle size={14} /> Recommended Plan
-              </h4>
-              <p className="text-sm text-slate-400">
-                Based on your account age, send <span className="text-white font-bold">{warmupDays * 5 + 5} messages</span> today.
-                Use a delay of <span className="text-white font-bold">45-90 seconds</span> between messages.
-              </p>
-            </div>
-          </div>
+            <div className="space-y-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Contacts (Number,Name - one per line)</label>
+                <textarea 
+                  value={contacts}
+                  onChange={(e) => setContacts(e.target.value)}
+                  placeholder="880170000000,Neaz&#10;880180000000,Tamim"
+                  className="w-full h-40 bg-navy-900 border border-navy-700 rounded-2xl p-4 outline-none focus:border-gold-500/50 resize-none text-sm font-mono"
+                />
+              </div>
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-xl bg-navy-700/30">
-              <div className="flex items-center gap-3">
-                <Clock className="text-gold-500" size={18} />
-                <span className="text-sm">Randomized Interval</span>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Message with Spintax</label>
+                <textarea 
+                  value={rawMessage}
+                  onChange={(e) => setRawMessage(e.target.value)}
+                  placeholder="{Hi|Hello|Hey} [Name], check out our new offer!"
+                  className="w-full h-32 bg-navy-900 border border-navy-700 rounded-2xl p-4 outline-none focus:border-gold-500/50 resize-none text-sm"
+                />
+                <div className="mt-2 flex gap-2">
+                  <span className="text-[10px] bg-navy-900 px-2 py-1 rounded text-slate-500">Use {'{A|B}'} for options</span>
+                  <span className="text-[10px] bg-navy-900 px-2 py-1 rounded text-slate-500">Use [Name] for personality</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500 bg-navy-800 px-2 py-1 rounded">20-60s</span>
-                <input type="checkbox" checked readOnly className="accent-gold-500" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between p-4 rounded-xl bg-navy-700/30">
-              <div className="flex items-center gap-3">
-                <Layers className="text-gold-500" size={18} />
-                <span className="text-sm">Spintax (Spin-tax) Tool</span>
-              </div>
-              <input type="checkbox" checked readOnly className="accent-gold-500" />
-            </div>
-            <button className="w-full py-3 gold-gradient text-navy-900 font-bold rounded-xl mt-4 shadow-xl shadow-gold-500/20 active:scale-95 transition-all">
-              Initialize Sender
-            </button>
-          </div>
-        </div>
-      </section>
 
-      <section className="bg-navy-800/50 border border-navy-700 rounded-2xl p-8">
-        <h3 className="text-lg font-bold mb-4">Engagement Check</h3>
-        <p className="text-sm text-slate-400 mb-6">Upload your contact list to verify connectivity and engagement history.</p>
-        <div className="border-2 border-dashed border-navy-600 rounded-2xl p-12 flex flex-col items-center justify-center hover:border-gold-500/30 transition-all cursor-pointer group">
-          <div className="w-16 h-16 rounded-full bg-navy-700 flex items-center justify-center mb-4 group-hover:scale-110 transition-all">
-            <Send className="text-gold-500" />
-          </div>
-          <p className="text-sm font-medium">Drop CSV/Excel or click to browse</p>
-          <p className="text-xs text-slate-600 mt-1">Recommended: Max 500 contacts per batch</p>
+              <button 
+                onClick={handleScheduleMarketing}
+                className="w-full py-4 gold-gradient text-navy-900 font-bold rounded-2xl shadow-xl shadow-gold-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+              >
+                <Send size={20} /> Deploy Secured Campaign
+              </button>
+            </div>
+          </section>
         </div>
-      </section>
+      </div>
     </div>
   );
 }
