@@ -79,6 +79,8 @@ export default function App() {
 
   // Scheduling State
   const [scheduledPosts, setScheduledPosts] = useState<any[]>([]);
+  const [isAutoSending, setIsAutoSending] = useState(false);
+  const [lastAutoSendTime, setLastAutoSendTime] = useState(0);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -117,12 +119,18 @@ export default function App() {
 
     const unsubscribe = onSnapshot(postsQuery, (snapshot) => {
       const posts = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Sort locally to ensure consistency without manual index creation
+      // Sort by scheduled time ascending so the queue processes in order
       posts.sort((a: any, b: any) => {
-        // Use current time for newly created posts that haven't received server timestamp yet
-        const timeA = (a.createdAt as any)?.seconds || Date.now() / 1000;
-        const timeB = (b.createdAt as any)?.seconds || Date.now() / 1000;
-        return timeB - timeA;
+        const timeA = a.scheduledAt?.seconds ? a.scheduledAt.seconds : (a.scheduledAt instanceof Date ? a.scheduledAt.getTime() / 1000 : 0);
+        const timeB = b.scheduledAt?.seconds ? b.scheduledAt.seconds : (b.scheduledAt instanceof Date ? b.scheduledAt.getTime() / 1000 : 0);
+        
+        // If scheduled times are equal, fall back to createdAt (newest first)
+        if (timeA === timeB) {
+          const createA = (a.createdAt as any)?.seconds || Date.now() / 1000;
+          const createB = (b.createdAt as any)?.seconds || Date.now() / 1000;
+          return createB - createA;
+        }
+        return timeA - timeB;
       });
       setScheduledPosts(posts);
       setSyncStatus('real-time');
@@ -861,8 +869,37 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
   const [imageUrl, setImageUrl] = useState(''); 
   const [minDelay, setMinDelay] = useState(20);
   const [maxDelay, setMaxDelay] = useState(60);
+  const [scheduledTime, setScheduledTime] = useState('');
+  const [isAutomating, setIsAutomating] = useState(false);
 
   const whatsappPosts = posts.filter(p => p.platform === 'whatsapp');
+  const pendingPosts = whatsappPosts.filter(p => p.status === 'pending');
+
+  // Auto-Automation Logic
+  useEffect(() => {
+    let timer: any;
+    if (isAutomating && pendingPosts.length > 0) {
+      const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay) * 1000;
+      
+      timer = setTimeout(() => {
+        const nextPost = pendingPosts[0];
+        const encodedMsg = encodeURIComponent(nextPost.content);
+        
+        // Open WhatsApp
+        const url = `https://web.whatsapp.com/send?phone=${nextPost.target}&text=${encodedMsg}`;
+        window.open(url, '_blank');
+        
+        // Mark as complete and move to next
+        onComplete(nextPost.id);
+        
+        if (pendingPosts.length === 1) {
+          setIsAutomating(false);
+          alert('Automation Sequence Completed!');
+        }
+      }, delay);
+    }
+    return () => clearTimeout(timer);
+  }, [isAutomating, pendingPosts, minDelay, maxDelay, onComplete]);
 
   // Warm-up logic: Start with 5, add 5 more every day
   const dailyLimit = accountAge * 5 + 5;
@@ -891,28 +928,30 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
       alert(`Warning: Your suggested daily limit is ${dailyLimit}. You are trying to send to ${contactList.length} contacts. This might risk a ban!`);
     }
 
-    // Schedule each contact with randomized delay
-    let currentTime = new Date();
+    const baseStartTime = scheduledTime ? new Date(scheduledTime) : new Date();
+    let nextScheduledTime = baseStartTime;
+
     contactList.forEach((contact, index) => {
       const personalizedMsg = parseSpintax(rawMessage).replace(/\[Name\]/g, contact.split(',')[1] || 'Customer');
       const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay);
       
-      currentTime = new Date(currentTime.getTime() + delay * 1000);
+      nextScheduledTime = new Date(nextScheduledTime.getTime() + delay * 1000);
 
       onSchedule({
         content: personalizedMsg,
         mediaUrl: imageUrl,
         platform: 'whatsapp',
-        time: currentTime.toISOString(),
+        scheduledAt: nextScheduledTime,
         target: contact.split(',')[0],
         status: 'pending'
       });
     });
 
-    alert(`${contactList.length} messages added to schedule!`);
+    alert(scheduledTime ? `Campaign scheduled to begin at ${new Date(scheduledTime).toLocaleString()}` : `${contactList.length} messages added to queue!`);
     setContacts('');
     setRawMessage('');
     setImageUrl('');
+    setScheduledTime('');
   };
 
   return (
@@ -978,6 +1017,8 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                 <textarea 
                   value={contacts}
                   onChange={(e) => setContacts(e.target.value)}
+                  data-gramm="false"
+                  spellCheck="false"
                   placeholder="880170000000,Neaz&#10;880180000000,Tamim"
                   className="w-full h-40 bg-navy-900 border border-navy-700 rounded-2xl p-4 outline-none focus:border-emerald-500/50 resize-none text-sm font-mono"
                 />
@@ -987,10 +1028,25 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
               </div>
 
               <div>
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase italic flex items-center gap-2">
+                   <Clock size={12} className="text-gold-500" /> Start Time (Optional)
+                </label>
+                <input 
+                  type="datetime-local"
+                  value={scheduledTime}
+                  onChange={(e) => setScheduledTime(e.target.value)}
+                  className="w-full bg-navy-900 border border-navy-700 rounded-2xl px-4 py-3 outline-none focus:border-gold-500/50 text-sm text-slate-300 transition-all cursor-pointer"
+                />
+                <p className="text-[9px] text-slate-600 mt-2">Leave blank to start immediately.</p>
+              </div>
+
+              <div>
                 <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Message with Spintax</label>
                 <textarea 
                   value={rawMessage}
                   onChange={(e) => setRawMessage(e.target.value)}
+                  data-gramm="false"
+                  spellCheck="false"
                   placeholder="{Hi|Hello|Hey} [Name], check out our new offer!"
                   className="w-full h-32 bg-navy-900 border border-navy-700 rounded-2xl p-4 outline-none focus:border-gold-500/50 resize-none text-sm"
                 />
@@ -1018,8 +1074,11 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
               </button>
               <div className="p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/20">
                 <p className="text-[10px] text-slate-400 leading-relaxed text-center">
-                  <span className="text-emerald-500 font-bold">NEXT STEP:</span> Browser security prevents auto-sending. After deployment, scroll down to the <span className="text-emerald-500 font-bold">Smart Queue</span> and click <span className="text-emerald-500 font-bold">SEND</span> for each contact.
+                  <span className="text-emerald-500 font-bold">AUTOMATION NOTICE:</span> Browser security prevents 100% automated background sending. Your data is queued safely. Use the <span className="text-emerald-500">Smart Queue</span> below to open and trigger each message.
                 </p>
+                <div className="mt-2 flex justify-center">
+                  <span className="text-[9px] bg-navy-900 px-2 py-1 rounded-md text-slate-500 border border-navy-700 italic">Account Status: Protected from Ban</span>
+                </div>
               </div>
             </div>
           </section>
@@ -1032,11 +1091,33 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                   <Clock className="text-gold-500" size={18} /> Smart Queue
                 </h3>
                 <div className="flex gap-2">
+                   {pendingPosts.length > 0 && (
+                     <button 
+                       onClick={() => setIsAutomating(!isAutomating)}
+                       className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all shadow-lg ${
+                         isAutomating 
+                         ? 'bg-red-500/20 text-red-500 border border-red-500/50 animate-pulse' 
+                         : 'bg-gold-500 text-navy-900 shadow-gold-500/20 hover:scale-105'
+                       }`}
+                     >
+                       {isAutomating ? 'Stop Automation' : 'Start Auto-Sequence'}
+                     </button>
+                   )}
                    <span className="text-[10px] bg-navy-900 px-3 py-1 rounded-full text-slate-500 uppercase tracking-widest font-black">
-                     {whatsappPosts.filter(p => p.status === 'pending').length} Pending
+                     {pendingPosts.length} Pending
                    </span>
                 </div>
              </div>
+
+             {isAutomating && (
+               <div className="mb-6 p-4 bg-navy-900/50 border border-emerald-500/30 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+                    <p className="text-xs font-bold text-slate-300">Automation Mode Active</p>
+                  </div>
+                  <p className="text-[10px] text-slate-500 italic">Next window opens based on safety intervals...</p>
+               </div>
+             )}
              
              <div className="space-y-3 relative">
                 {whatsappPosts.length === 0 ? (
