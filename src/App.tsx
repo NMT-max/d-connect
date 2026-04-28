@@ -151,7 +151,9 @@ export default function App() {
       scheduledPosts.forEach(async (post) => {
         if (post.status !== 'pending') return;
         
-        const scheduledTime = new Date(post.time);
+        const scheduledTime = post.scheduledAt?.seconds 
+          ? new Date(post.scheduledAt.seconds * 1000) 
+          : (post.scheduledAt instanceof Date ? post.scheduledAt : new Date(post.scheduledAt || Date.now()));
         if (now >= scheduledTime) {
           console.log(`Executing targeted task: ${post.id} for ${post.platform}`);
           
@@ -443,7 +445,13 @@ function AIView({ prompt, setPrompt, channel, setChannel, language, setLanguage,
               <button 
                 disabled={!scheduleTime}
                 onClick={() => {
-                  onSchedule({ content: result, platform: channel, time: scheduleTime });
+                  const scheduledDate = scheduleTime ? new Date(scheduleTime) : new Date();
+                  onSchedule({ 
+                    content: result, 
+                    platform: channel, 
+                    scheduledAt: scheduledDate, 
+                    target: 'Broadcast' 
+                  });
                   setScheduleTime('');
                   alert('Post Scheduled Successfully!');
                 }}
@@ -493,6 +501,7 @@ function ScheduleDashboard({ posts, deletePost }: { posts: any[], deletePost: (i
               <th className="px-8 py-4">Status</th>
               <th className="px-8 py-4">Platform</th>
               <th className="px-8 py-4">Target Recipient</th>
+              <th className="px-8 py-4">Scheduled</th>
               <th className="px-8 py-4">Snippet</th>
               <th className="px-8 py-4">Actions</th>
             </tr>
@@ -514,6 +523,11 @@ function ScheduleDashboard({ posts, deletePost }: { posts: any[], deletePost: (i
                 </td>
                 <td className="px-8 py-4 capitalize font-medium text-slate-400">{post.platform}</td>
                 <td className="px-8 py-4 text-xs font-mono text-slate-500">{post.target || 'N/A'}</td>
+                <td className="px-8 py-4 text-[10px] text-slate-500 font-mono">
+                  {post.scheduledAt?.seconds 
+                    ? new Date(post.scheduledAt.seconds * 1000).toLocaleString() 
+                    : (post.scheduledAt instanceof Date ? post.scheduledAt.toLocaleString() : 'Now')}
+                </td>
                 <td className="px-8 py-4 max-w-[200px] truncate text-slate-300 italic">
                   {post.mediaUrl && <span className="inline-block w-2 h-2 rounded-full bg-gold-500 mr-2" title="Has Media Attachment" />}
                   "{post.content}"

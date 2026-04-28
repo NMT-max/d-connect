@@ -13,11 +13,14 @@ service cloud.firestore {
     function isEmailVerified() { return request.auth.token.email_verified == true; }
 
     function isValidScheduledPost(data) {
-      return data.keys().hasAll(['content', 'platform', 'time', 'status', 'userId', 'createdAt', 'updatedAt'])
+      return data.keys().hasAll(['content', 'platform', 'status', 'userId', 'createdAt', 'updatedAt'])
         && data.content is string
         && data.platform is string
         && data.status is string
-        && data.userId == request.auth.uid;
+        && data.userId == request.auth.uid
+        && (!('target' in data) || data.target is string || data.target == null)
+        && (!('mediaUrl' in data) || data.mediaUrl is string || data.mediaUrl == null)
+        && (!('scheduledAt' in data) || data.scheduledAt is timestamp || data.scheduledAt is string || data.scheduledAt == null);
     }
 
     match /scheduled_posts/{postId} {
