@@ -993,6 +993,7 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
   const [currentAutoTarget, setCurrentAutoTarget] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [readyForManualPush, setReadyForManualPush] = useState<any>(null);
 
   // Auto-Automation Logic
   useEffect(() => {
@@ -1081,21 +1082,10 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
           } else {
             // Manual Mode Logic
             const encodedMsg = encodeURIComponent(nextPost.content);
-            const url = `https://web.whatsapp.com/send?phone=${nextPost.target}&text=${encodedMsg}`;
-            const win = window.open(url, '_blank');
-            
-            if (!win) {
-              setIsAutomating(false);
-              alert('POP-UP BLOCKED: Your browser blocked the WhatsApp tab. Please click the "Pop-up blocked" icon in your URL bar and allow pop-ups for this site.');
-              return;
-            }
-
-            onComplete(nextPost.id);
-            
-            if (pendingPosts.length === 1) {
-              setIsAutomating(false);
-              setCurrentAutoTarget(null);
-            }
+            const cleanTarget = nextPost.target.replace(/\D/g, "");
+            const url = `https://wa.me/${cleanTarget}?text=${encodedMsg}`;
+            setReadyForManualPush({ ...nextPost, url });
+            // We stop here and wait for user click to bypass pop-up blockers
           }
         })();
       }, delaySeconds * 1000);
@@ -1406,13 +1396,33 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                         </div>
                       </>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <p className="text-[10px] text-slate-400 leading-relaxed uppercase tracking-tighter">
-                          Using Browser Tab Automation. Requires manual "Enter" press in WhatsApp tab.
+                          Using Browser Tab Automation. Requires manual "Enter" press in WhatsApp.
                         </p>
-                        <p className="text-[10px] text-emerald-500 flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Ready to open tabs...
-                        </p>
+                        
+                        {readyForManualPush ? (
+                          <motion.button
+                            initial={{ scale: 0.95 }}
+                            animate={{ scale: [1, 1.05, 1] }}
+                            transition={{ repeat: Infinity, duration: 1.5 }}
+                            onClick={() => {
+                              window.open(readyForManualPush.url, '_blank');
+                              onComplete(readyForManualPush.id);
+                              setReadyForManualPush(null);
+                              if (pendingPosts.length === 1) {
+                                setIsAutomating(false);
+                              }
+                            }}
+                            className="w-full py-3 bg-emerald-500 text-navy-900 font-black rounded-xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 text-xs"
+                          >
+                            <ExternalLink size={16} /> OPEN WHATSAPP TO SEND
+                          </motion.button>
+                        ) : (
+                          <p className="text-[10px] text-emerald-500 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> {countdown && countdown > 0 ? `Preparing next message in ${countdown}s...` : 'Searching next target...'}
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1475,12 +1485,12 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                               </button>
                               <button 
                                 onClick={() => {
-                                  const url = `https://web.whatsapp.com/send?phone=${post.target}&text=${encodeURIComponent(post.content)}`;
-                                  navigator.clipboard.writeText(url);
-                                  alert('Direct WhatsApp link copied!');
+                                  const url = `https://wa.me/${post.target.replace(/\D/g, "")}?text=${encodeURIComponent(post.content)}`;
+                                  window.open(url, '_blank');
+                                  onComplete(post.id);
                                 }}
                                 className="p-2 bg-navy-700 text-slate-300 rounded-lg hover:text-gold-500 transition-colors" 
-                                title="Copy direct link"
+                                title="Open WhatsApp Link"
                               >
                                 <ExternalLink size={14} />
                               </button>
