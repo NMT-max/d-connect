@@ -902,14 +902,20 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
         
         // Open WhatsApp
         const url = `https://web.whatsapp.com/send?phone=${nextPost.target}&text=${encodedMsg}`;
-        window.open(url, '_blank');
+        const win = window.open(url, '_blank');
         
-        // Mark as complete and move to next
+        if (!win) {
+          setIsAutomating(false);
+          alert('POP-UP BLOCKED: Please allow pop-ups for this site to use automation.');
+          return;
+        }
+
+        // We mark as complete because we've triggered the window. 
+        // User just needs to press Enter in the new tab.
         onComplete(nextPost.id);
         
         if (pendingPosts.length === 1) {
           setIsAutomating(false);
-          alert('Automation Sequence Completed!');
         }
       }, delay);
     }
@@ -1125,12 +1131,28 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
              </div>
 
              {isAutomating && (
-               <div className="mb-6 p-4 bg-navy-900/50 border border-emerald-500/30 rounded-2xl flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-                    <p className="text-xs font-bold text-slate-300">Automation Mode Active</p>
+               <div className="mb-6 p-6 bg-gold-500/10 border border-gold-500/30 rounded-3xl">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 bg-gold-500 rounded-full animate-ping" />
+                      <p className="text-sm font-bold text-gold-500 uppercase tracking-widest">Auto-Sequence Active</p>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono">Random Delay: {minDelay}-{maxDelay}s</span>
                   </div>
-                  <p className="text-[10px] text-slate-500 italic">Next window opens based on safety intervals...</p>
+                  <div className="space-y-3 text-[11px] text-slate-400">
+                    <p className="flex items-center gap-2">
+                       <span className="w-1.5 h-1.5 rounded-full bg-gold-500" />
+                       WhatsApp Web opens in a new tab for each contact.
+                    </p>
+                    <p className="flex items-center gap-2">
+                       <span className="w-1.5 h-1.5 rounded-full bg-gold-500" />
+                       <span className="text-white font-bold">Action Required:</span> You must press <span className="bg-navy-700 px-1.5 py-0.5 rounded text-gold-500 font-black">ENTER</span> in each WhatsApp tab to send the message.
+                    </p>
+                    <p className="flex items-center gap-2">
+                       <span className="w-1.5 h-1.5 rounded-full bg-gold-500" />
+                       If you have an image, it is copied to your clipboard. Use <span className="text-white font-bold">Ctrl+V</span> if it doesn't appear.
+                    </p>
+                  </div>
                </div>
              )}
              

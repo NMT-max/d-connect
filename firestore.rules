@@ -22,18 +22,12 @@ service cloud.firestore {
     }
 
     match /scheduled_posts/{postId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      
-      allow create: if isSignedIn() 
-        && incoming().userId == request.auth.uid
-        && incoming().content is string
-        && incoming().platform is string;
-
-      allow update: if isOwner(existing().userId)
-        && incoming().userId == existing().userId;
-
-      allow delete: if isOwner(existing().userId);
+      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow write: if isSignedIn() && (
+        (request.method == 'create' && incoming().userId == request.auth.uid) ||
+        (request.method == 'update' && existing().userId == request.auth.uid) ||
+        (request.method == 'delete' && existing().userId == request.auth.uid)
+      );
     }
 
     function isValidUserSetting(data) {
