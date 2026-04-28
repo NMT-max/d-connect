@@ -22,7 +22,8 @@ import {
   Menu,
   X,
   LogOut,
-  User as UserIcon
+  User as UserIcon,
+  ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { generateMarketingContent } from './lib/gemini';
@@ -60,6 +61,7 @@ export default function App() {
   const [userRole, setUserRole] = useState<'admin' | 'editor' | 'viewer'>('admin');
   
   const [activeModule, setActiveModule] = useState<Module>('dashboard');
+  const [syncStatus, setSyncStatus] = useState<'real-time' | 'error' | 'connecting'>('connecting');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
   // AI State
@@ -107,18 +109,25 @@ export default function App() {
     };
     fetchSettings();
 
-    // Load Posts
+    // Load Posts - Simple query without orderBy to avoid index requirement
     const postsQuery = query(
       collection(db, 'scheduled_posts'),
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('userId', '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(postsQuery, (snapshot) => {
       const posts = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Sort locally to ensure consistency without manual index creation
+      posts.sort((a: any, b: any) => {
+        const timeA = (a.createdAt as any)?.seconds || 0;
+        const timeB = (b.createdAt as any)?.seconds || 0;
+        return timeB - timeA;
+      });
       setScheduledPosts(posts);
+      setSyncStatus('real-time');
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'scheduled_posts');
+      console.error("Firestore Sync Error:", error);
+      setSyncStatus('error');
     });
 
     return () => unsubscribe();
@@ -288,7 +297,13 @@ export default function App() {
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">
               <p className="text-xs text-slate-500">Cloud Sync</p>
-              <p className="text-sm font-medium text-emerald-500 flex items-center gap-1"><CheckCircle2 size={12} /> Real-time</p>
+              <span className={`text-sm font-medium flex items-center gap-1 ${
+                syncStatus === 'real-time' ? 'text-emerald-500' : 
+                syncStatus === 'error' ? 'text-red-500' : 'text-gold-500'
+              }`}>
+                {syncStatus === 'real-time' ? <CheckCircle2 size={12} /> : <div className="w-2 h-2 rounded-full bg-current animate-pulse" />}
+                {syncStatus === 'real-time' ? 'Real-time' : syncStatus === 'error' ? 'Sync Error' : 'Connecting...'}
+              </span>
             </div>
             <div className="w-10 h-10 rounded-full border-2 border-navy-700 bg-navy-800 flex items-center justify-center overflow-hidden">
                <img src={user.photoURL || ''} alt="User" />
@@ -975,51 +990,78 @@ function WhatsAppView({ onSchedule, posts, deletePost }: { onSchedule: (post: an
           </section>
 
           {/* Local Execution Queue for WhatsApp */}
-          <section className="bg-navy-800 border border-navy-700 rounded-3xl p-8">
-             <div className="flex justify-between items-center mb-6">
+          <section className="bg-navy-800 border border-navy-700 rounded-3xl p-8 shadow-gold-500/5 shadow-2xl relative overflow-hidden">
+             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 blur-3xl -mr-16 -mt-16" />
+             <div className="flex justify-between items-center mb-6 relative">
                 <h3 className="text-lg font-bold flex items-center gap-2 italic">
-                  <Clock className="text-gold-500" size={18} /> Execution Queue
+                  <Clock className="text-gold-500" size={18} /> Smart Queue
                 </h3>
-                <span className="text-[10px] bg-navy-900 px-3 py-1 rounded-full text-slate-500 uppercase tracking-widest font-black">Ready to Blast</span>
+                <div className="flex gap-2">
+                   <span className="text-[10px] bg-navy-900 px-3 py-1 rounded-full text-slate-500 uppercase tracking-widest font-black">
+                     {whatsappPosts.filter(p => p.status === 'pending').length} Pending
+                   </span>
+                </div>
              </div>
              
-             <div className="space-y-3">
+             <div className="space-y-3 relative">
                 {whatsappPosts.length === 0 ? (
-                  <div className="text-center py-10 text-slate-600 border border-dashed border-navy-700 rounded-2xl">
-                    <p className="text-sm">No pending WhatsApp tasks.</p>
+                  <div className="text-center py-12 text-slate-600 border border-dashed border-navy-700 rounded-2xl bg-navy-900/20">
+                    <Zap className="mx-auto mb-3 opacity-20" size={32} />
+                    <p className="text-sm">Queue is empty. Deploy a campaign to start.</p>
                   </div>
                 ) : (
-                  whatsappPosts.slice(0, 10).map((post) => (
-                    <div key={post.id} className="flex items-center justify-between p-4 bg-navy-900/50 rounded-2xl border border-navy-700 group hover:border-gold-500/30 transition-all">
+                  whatsappPosts.slice(0, 15).map((post) => (
+                    <div key={post.id} className="flex items-center justify-between p-4 bg-navy-900/50 rounded-2xl border border-navy-700 group hover:border-emerald-500/30 transition-all">
                        <div className="flex items-center gap-4">
-                          <div className={`w-2 h-2 rounded-full ${post.status === 'sent' ? 'bg-emerald-500' : 'bg-gold-500 animate-pulse'}`} />
+                          <div className={`w-2 h-2 rounded-full ${post.status === 'sent' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-gold-500 animate-pulse'}`} />
                           <div>
                              <p className="text-sm font-bold text-slate-200">{post.target}</p>
-                             <p className="text-[10px] text-slate-500 truncate max-w-[200px]">{post.content}</p>
+                             <div className="flex items-center gap-2">
+                               <p className="text-[10px] text-slate-500 truncate max-w-[150px]">{post.content}</p>
+                               {post.mediaUrl && <div className="w-1.5 h-1.5 rounded-full bg-gold-500" title="Has attachment" />}
+                             </div>
                           </div>
                        </div>
                        <div className="flex gap-2">
-                          {post.status === 'pending' && (
-                            <button 
-                              onClick={() => {
-                                const encodedMsg = encodeURIComponent(post.content);
-                                if (post.mediaUrl) {
-                                  navigator.clipboard.writeText(post.mediaUrl);
-                                  alert('Image link copied! Paste it in the chat.');
-                                }
-                                window.open(`https://web.whatsapp.com/send?phone=${post.target}&text=${encodedMsg}`, '_blank');
-                              }}
-                              className="px-4 py-2 bg-emerald-500 text-navy-900 text-xs font-bold rounded-xl hover:scale-105 transition-all"
-                            >
-                              Send Now
-                            </button>
+                          {post.status === 'pending' ? (
+                            <div className="flex gap-1">
+                               <button 
+                                onClick={() => {
+                                  const encodedMsg = encodeURIComponent(post.content);
+                                  if (post.mediaUrl) {
+                                    navigator.clipboard.writeText(post.mediaUrl);
+                                  }
+                                  window.open(`https://web.whatsapp.com/send?phone=${post.target}&text=${encodedMsg}`, '_blank');
+                                }}
+                                className="px-3 py-2 bg-emerald-500 text-navy-900 text-xs font-black rounded-lg hover:brightness-110 transition-all flex items-center gap-1"
+                              >
+                                SEND
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  const url = `https://web.whatsapp.com/send?phone=${post.target}&text=${encodeURIComponent(post.content)}`;
+                                  navigator.clipboard.writeText(url);
+                                  alert('Direct WhatsApp link copied!');
+                                }}
+                                className="p-2 bg-navy-700 text-slate-300 rounded-lg hover:text-gold-500 transition-colors" 
+                                title="Copy direct link"
+                              >
+                                <ExternalLink size={14} />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider px-2 py-1 bg-emerald-500/10 rounded-md">Executed</span>
                           )}
-                          <button onClick={() => deletePost(post.id)} className="p-2 text-slate-600 hover:text-red-400"><X size={16} /></button>
+                          <button onClick={() => deletePost(post.id)} className="p-2 text-slate-600 hover:text-red-400"><X size={14} /></button>
                        </div>
                     </div>
                   ))
                 )}
-                {whatsappPosts.length > 10 && <p className="text-center text-[10px] text-slate-600 mt-4">...and {whatsappPosts.length - 10} more in queue</p>}
+                {whatsappPosts.length > 15 && (
+                  <button className="w-full py-2 text-[10px] text-slate-500 hover:text-gold-500 transition-colors font-bold uppercase tracking-widest">
+                    + {whatsappPosts.length - 15} more in history
+                  </button>
+                )}
              </div>
           </section>
         </div>
