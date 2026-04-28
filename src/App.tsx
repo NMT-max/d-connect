@@ -881,6 +881,12 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
       return;
     }
 
+    if (imageUrl && imageUrl.includes('drive.google.com')) {
+      if (!confirm('You are using a Google Drive link. WhatsApp might not display the image preview correctly. Use a direct image link if possible. Continue anyway?')) {
+        return;
+      }
+    }
+
     if (contactList.length > dailyLimit) {
       alert(`Warning: Your suggested daily limit is ${dailyLimit}. You are trying to send to ${contactList.length} contacts. This might risk a ban!`);
     }
@@ -973,8 +979,11 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                   value={contacts}
                   onChange={(e) => setContacts(e.target.value)}
                   placeholder="880170000000,Neaz&#10;880180000000,Tamim"
-                  className="w-full h-40 bg-navy-900 border border-navy-700 rounded-2xl p-4 outline-none focus:border-gold-500/50 resize-none text-sm font-mono"
+                  className="w-full h-40 bg-navy-900 border border-navy-700 rounded-2xl p-4 outline-none focus:border-emerald-500/50 resize-none text-sm font-mono"
                 />
+                <p className="text-[10px] text-slate-600 mt-2 italic shadow-sm">
+                  Format: <span className="text-emerald-500 font-bold">CountryCode</span>Number (No + sign). Example: 88017...
+                </p>
               </div>
 
               <div>
@@ -996,7 +1005,9 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                   placeholder="https://example.com/image.jpg"
                   className="w-full bg-navy-900 border border-navy-700 rounded-2xl px-4 py-3 outline-none focus:border-gold-500/50 text-sm"
                 />
-                <p className="text-[10px] text-slate-600 mt-2 italic">Note: WhatsApp Web requires manual attachment, we will auto-copy the link for you.</p>
+                <p className="text-[10px] text-slate-600 mt-2 italic">
+                  Note: Use a direct link (ends in .jpg/.png). Google Drive links <span className="text-red-400">won't show preview</span>.
+                </p>
               </div>
 
               <button 
