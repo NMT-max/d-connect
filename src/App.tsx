@@ -300,7 +300,13 @@ export default function App() {
           <AnimatePresence mode="wait">
             <motion.div key={activeModule} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
               {activeModule === 'dashboard' && <DashboardView posts={scheduledPosts} deletePost={deletePost} />}
-              {activeModule === 'whatsapp' && <WhatsAppView onSchedule={saveScheduledPost} />}
+              {activeModule === 'whatsapp' && (
+                <WhatsAppView 
+                  onSchedule={saveScheduledPost} 
+                  posts={scheduledPosts}
+                  deletePost={deletePost}
+                />
+              )}
               {activeModule === 'email' && <EmailView apiKey={resendApiKey} setApiKey={setResendApiKey} onSave={saveSettings} />}
               {activeModule === 'social' && <SocialView fbToken={fbAccessToken} setFbToken={setFbAccessToken} pageId={pageId} setPageId={setPageId} igId={igAccountId} setIgId={setIgAccountId} onSave={saveSettings} />}
               {activeModule === 'ai' && (
@@ -814,13 +820,15 @@ function StatCard({ title, value, subValue, icon }: { title: string, value: stri
   );
 }
 
-function WhatsAppView({ onSchedule }: { onSchedule: (post: any) => void }) {
+function WhatsAppView({ onSchedule, posts, deletePost }: { onSchedule: (post: any) => void, posts: any[], deletePost: (id: string) => void }) {
   const [accountAge, setAccountAge] = useState(1);
   const [contacts, setContacts] = useState<string>('');
   const [rawMessage, setRawMessage] = useState('');
   const [imageUrl, setImageUrl] = useState(''); 
   const [minDelay, setMinDelay] = useState(20);
   const [maxDelay, setMaxDelay] = useState(60);
+
+  const whatsappPosts = posts.filter(p => p.platform === 'whatsapp');
 
   // Warm-up logic: Start with 5, add 5 more every day
   const dailyLimit = accountAge * 5 + 5;
@@ -868,11 +876,11 @@ function WhatsAppView({ onSchedule }: { onSchedule: (post: any) => void }) {
   };
 
   return (
-    <div className="max-w-5xl space-y-8 pb-20">
+    <div className="max-w-5xl space-y-8 pb-32">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Planner Settings */}
         <div className="lg:col-span-1 space-y-6">
-          <section className="bg-navy-800 border border-navy-700 rounded-3xl p-6">
+          <section className="bg-navy-800 border border-navy-700 rounded-3xl p-6 shadow-xl">
             <h3 className="text-sm font-bold uppercase text-gold-500 mb-6 flex items-center gap-2">
               <Zap size={16} /> Warm-up Config
             </h3>
@@ -890,7 +898,7 @@ function WhatsAppView({ onSchedule }: { onSchedule: (post: any) => void }) {
                 <p className="text-xs text-slate-400">Safe limit for today:</p>
                 <p className="text-xl font-bold text-emerald-500">{dailyLimit} Messages</p>
                 <div className="mt-2 p-2 bg-navy-900 rounded-lg">
-                  <p className="text-[9px] text-slate-600 font-mono">Sender: +8801775939996</p>
+                  <p className="text-[9px] text-slate-600 font-mono">Node: +8801775939996</p>
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-tighter">Recommended for your node</p>
               </div>
@@ -916,7 +924,7 @@ function WhatsAppView({ onSchedule }: { onSchedule: (post: any) => void }) {
 
         {/* Campaign Builder */}
         <div className="lg:col-span-2 space-y-6">
-          <section className="bg-navy-800 border border-navy-700 rounded-3xl p-8">
+          <section className="bg-navy-800 border border-navy-700 rounded-3xl p-8 shadow-2xl">
             <h3 className="text-xl font-bold mb-6 flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
                 <MessageSquare className="text-emerald-500" />
@@ -947,16 +955,14 @@ function WhatsAppView({ onSchedule }: { onSchedule: (post: any) => void }) {
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Image URL (Optional)</label>
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    value={imageUrl}
-                    onChange={(e) => setImageUrl(e.target.value)}
-                    placeholder="https://example.com/image.jpg"
-                    className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50 text-sm"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-600 mt-2 italic">Note: WhatsApp Web requires manual attachment, but we will provide the link for easy copying.</p>
+                <input 
+                  type="text" 
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://example.com/image.jpg"
+                  className="w-full bg-navy-900 border border-navy-700 rounded-2xl px-4 py-3 outline-none focus:border-gold-500/50 text-sm"
+                />
+                <p className="text-[10px] text-slate-600 mt-2 italic">Note: WhatsApp Web requires manual attachment, we will auto-copy the link for you.</p>
               </div>
 
               <button 
@@ -966,6 +972,55 @@ function WhatsAppView({ onSchedule }: { onSchedule: (post: any) => void }) {
                 <Send size={20} /> Deploy Secured Campaign
               </button>
             </div>
+          </section>
+
+          {/* Local Execution Queue for WhatsApp */}
+          <section className="bg-navy-800 border border-navy-700 rounded-3xl p-8">
+             <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold flex items-center gap-2 italic">
+                  <Clock className="text-gold-500" size={18} /> Execution Queue
+                </h3>
+                <span className="text-[10px] bg-navy-900 px-3 py-1 rounded-full text-slate-500 uppercase tracking-widest font-black">Ready to Blast</span>
+             </div>
+             
+             <div className="space-y-3">
+                {whatsappPosts.length === 0 ? (
+                  <div className="text-center py-10 text-slate-600 border border-dashed border-navy-700 rounded-2xl">
+                    <p className="text-sm">No pending WhatsApp tasks.</p>
+                  </div>
+                ) : (
+                  whatsappPosts.slice(0, 10).map((post) => (
+                    <div key={post.id} className="flex items-center justify-between p-4 bg-navy-900/50 rounded-2xl border border-navy-700 group hover:border-gold-500/30 transition-all">
+                       <div className="flex items-center gap-4">
+                          <div className={`w-2 h-2 rounded-full ${post.status === 'sent' ? 'bg-emerald-500' : 'bg-gold-500 animate-pulse'}`} />
+                          <div>
+                             <p className="text-sm font-bold text-slate-200">{post.target}</p>
+                             <p className="text-[10px] text-slate-500 truncate max-w-[200px]">{post.content}</p>
+                          </div>
+                       </div>
+                       <div className="flex gap-2">
+                          {post.status === 'pending' && (
+                            <button 
+                              onClick={() => {
+                                const encodedMsg = encodeURIComponent(post.content);
+                                if (post.mediaUrl) {
+                                  navigator.clipboard.writeText(post.mediaUrl);
+                                  alert('Image link copied! Paste it in the chat.');
+                                }
+                                window.open(`https://web.whatsapp.com/send?phone=${post.target}&text=${encodedMsg}`, '_blank');
+                              }}
+                              className="px-4 py-2 bg-emerald-500 text-navy-900 text-xs font-bold rounded-xl hover:scale-105 transition-all"
+                            >
+                              Send Now
+                            </button>
+                          )}
+                          <button onClick={() => deletePost(post.id)} className="p-2 text-slate-600 hover:text-red-400"><X size={16} /></button>
+                       </div>
+                    </div>
+                  ))
+                )}
+                {whatsappPosts.length > 10 && <p className="text-center text-[10px] text-slate-600 mt-4">...and {whatsappPosts.length - 10} more in queue</p>}
+             </div>
           </section>
         </div>
       </div>

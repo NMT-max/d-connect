@@ -14,35 +14,21 @@ service cloud.firestore {
 
     function isValidScheduledPost(data) {
       return data.keys().hasAll(['content', 'platform', 'time', 'status', 'userId', 'createdAt', 'updatedAt'])
-        && data.keys().size() >= 7 && data.keys().size() <= 9
-        && data.content is string && data.content.size() <= 5000
-        && data.platform in ['facebook', 'instagram', 'email', 'whatsapp']
-        && data.time is string && data.time.size() <= 100
-        && data.status in ['pending', 'sent', 'failed']
-        && data.userId == request.auth.uid
-        && (!('target' in data) || (data.target is string && data.target.size() <= 256))
-        && (!('mediaUrl' in data) || (data.mediaUrl is string && data.mediaUrl.size() <= 2048))
-        && (data.createdAt is timestamp || data.createdAt is string)
-        && (data.updatedAt is timestamp || data.updatedAt is string);
+        && data.content is string
+        && data.platform is string
+        && data.status is string
+        && data.userId == request.auth.uid;
     }
 
     match /scheduled_posts/{postId} {
-      allow get: if isOwner(existing().userId);
-      allow list: if isOwner(resource.data.userId);
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
       
       allow create: if isSignedIn() 
-        && isValidScheduledPost(incoming())
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && isValidScheduledPost(incoming());
 
       allow update: if isOwner(existing().userId)
-        && isValidScheduledPost(incoming())
-        && incoming().userId == existing().userId
-        && incoming().createdAt == existing().createdAt
-        && (
-          (incoming().diff(existing()).affectedKeys().hasOnly(['content', 'time', 'platform', 'updatedAt', 'target', 'mediaUrl'])) ||
-          (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) && existing().status == 'pending')
-        );
+        && isValidScheduledPost(incoming());
 
       allow delete: if isOwner(existing().userId);
     }
