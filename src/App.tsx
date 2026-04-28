@@ -1220,14 +1220,25 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                      />
                   </div>
                   <div className="bg-navy-900/50 p-4 rounded-2xl border border-gold-500/20 mb-4">
-                    <p className="text-xs text-white font-bold mb-1 italic">🚨 ACTION REQUIRED IN NEW TABS:</p>
+                    <p className="text-xs text-white font-bold mb-1 italic">🚨 MANUAL ACTION REQUIRED:</p>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Windows will open automatically. You MUST switch to the new tab and press <span className="bg-navy-700 px-1.5 py-0.5 rounded text-gold-500 font-black tracking-widest">ENTER</span> to actually send.
+                      Due to browser security, you must manually press <span className="bg-navy-700 px-1.5 py-0.5 rounded text-gold-500 font-black tracking-widest">ENTER</span> in the WhatsApp tab to send. 
                     </p>
+                    <div className="mt-2 space-y-1">
+                      <p className="text-[10px] text-emerald-500 flex items-center gap-1">
+                        <Check size={10} /> Tab will open automatically.
+                      </p>
+                      <p className="text-[10px] text-emerald-500 flex items-center gap-1">
+                        <Check size={10} /> Message is pre-filled.
+                      </p>
+                      <p className="text-[10px] text-emerald-500 flex items-center gap-1">
+                        <Check size={10} /> Image link (if any) copied to clipboard.
+                      </p>
+                    </div>
                   </div>
                   <div className="space-y-2 text-[10px] text-slate-500">
-                    <p className="flex items-center gap-2">• Using randomized safety delays ({minDelay}-{maxDelay}s).</p>
-                    <p className="flex items-center gap-2">• Image link copied to clipboard if applicable.</p>
+                    <p className="flex items-center gap-2">• Using randomized safety delays ({minDelay}-{maxDelay}s) to prevent bans.</p>
+                    <p className="flex items-center gap-2">• Daily & Hourly limits are active.</p>
                   </div>
                </div>
              )}
