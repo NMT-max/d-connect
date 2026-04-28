@@ -890,17 +890,55 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
   const whatsappPosts = posts.filter(p => p.platform === 'whatsapp');
   const pendingPosts = whatsappPosts.filter(p => p.status === 'pending');
 
+  const dailyLimit = accountAge * 5 + 5;
+  const hourlyLimit = Math.ceil(dailyLimit / 4);
+
+  const sentTodayCount = whatsappPosts.filter(p => {
+    if (p.status !== 'sent' || !p.updatedAt) return false;
+    const sentDate = p.updatedAt.seconds ? new Date(p.updatedAt.seconds * 1000) : new Date(p.updatedAt);
+    const today = new Date();
+    return sentDate.getDate() === today.getDate() &&
+           sentDate.getMonth() === today.getMonth() &&
+           sentDate.getFullYear() === today.getFullYear();
+  }).length;
+
+  const sentThisHourCount = whatsappPosts.filter(p => {
+    if (p.status !== 'sent' || !p.updatedAt) return false;
+    const sentDate = p.updatedAt.seconds ? new Date(p.updatedAt.seconds * 1000) : new Date(p.updatedAt);
+    const now = new Date();
+    return now.getTime() - sentDate.getTime() < 3600000;
+  }).length;
+
+  const isDailyLimitReached = sentTodayCount >= dailyLimit;
+  const isHourlyLimitReached = sentThisHourCount >= hourlyLimit;
+  const isLimitReached = isDailyLimitReached || isHourlyLimitReached;
+
   // Auto-Automation Logic
   useEffect(() => {
     let timer: any;
     if (isAutomating && pendingPosts.length > 0) {
+      if (isDailyLimitReached) {
+        setIsAutomating(false);
+        alert(`DAILY LIMIT REACHED (${dailyLimit}). Automation paused to protect your account. Remaining messages will stay in pending for tomorrow.`);
+        return;
+      }
+      
+      if (isHourlyLimitReached) {
+        setIsAutomating(false);
+        alert(`HOURLY LIMIT REACHED (${hourlyLimit}). Automation paused for 1 hour to prevent flags. Please try again later.`);
+        return;
+      }
+
       const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay) * 1000;
       
       timer = setTimeout(() => {
         const nextPost = pendingPosts[0];
-        const encodedMsg = encodeURIComponent(nextPost.content);
         
-        // Open WhatsApp
+        if (nextPost.mediaUrl) {
+          navigator.clipboard.writeText(nextPost.mediaUrl);
+        }
+
+        const encodedMsg = encodeURIComponent(nextPost.content);
         const url = `https://web.whatsapp.com/send?phone=${nextPost.target}&text=${encodedMsg}`;
         const win = window.open(url, '_blank');
         
@@ -923,8 +961,6 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
   }, [isAutomating, pendingPosts, minDelay, maxDelay, onComplete]);
 
   // Warm-up logic: Start with 5, add 5 more every day
-  const dailyLimit = accountAge * 5 + 5;
-
   const parseSpintax = (text: string) => {
     return text.replace(/\{([^{}]+)\}/g, (match, options) => {
       const choices = options.split('|');
@@ -1114,18 +1150,20 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                 <div className="flex gap-2">
                    {pendingPosts.length > 0 && (
                      <button 
+                       disabled={isLimitReached}
                        onClick={() => setIsAutomating(!isAutomating)}
                        className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all shadow-lg ${
+                         isLimitReached ? 'bg-slate-700 text-slate-500 cursor-not-allowed' :
                          isAutomating 
                          ? 'bg-red-500/20 text-red-500 border border-red-500/50 animate-pulse' 
                          : 'bg-gold-500 text-navy-900 shadow-gold-500/20 hover:scale-105'
                        }`}
                      >
-                       {isAutomating ? 'Stop Automation' : 'Start Auto-Sequence'}
+                       {isLimitReached ? 'Limit Reached' : (isAutomating ? 'Stop Automation' : 'Start Auto-Sequence')}
                      </button>
                    )}
                    <span className="text-[10px] bg-navy-900 px-3 py-1 rounded-full text-slate-500 uppercase tracking-widest font-black">
-                     {pendingPosts.length} Pending
+                     {pendingPosts.length} Pending Today
                    </span>
                 </div>
              </div>
@@ -1137,7 +1175,17 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete }: { onSchedul
                       <div className="w-3 h-3 bg-gold-500 rounded-full animate-ping" />
                       <p className="text-sm font-bold text-gold-500 uppercase tracking-widest">Auto-Sequence Active</p>
                     </div>
-                    <span className="text-[10px] text-slate-500 font-mono">Random Delay: {minDelay}-{maxDelay}s</span>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-400 font-mono block">Random Delay: {minDelay}-{maxDelay}s</span>
+                      <span className="text-[10px] text-gold-500/80 font-bold block">Sent Today: {sentTodayCount}/{dailyLimit}</span>
+                      <span className="text-[10px] text-slate-500 font-mono block">Sent This Hour: {sentThisHourCount}/{hourlyLimit}</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 w-full bg-navy-900 rounded-full mb-4 overflow-hidden">
+                     <div 
+                       className="h-full bg-gold-500 transition-all duration-500" 
+                       style={{ width: `${Math.min(100, (sentTodayCount / dailyLimit) * 100)}%` }}
+                     />
                   </div>
                   <div className="space-y-3 text-[11px] text-slate-400">
                     <p className="flex items-center gap-2">
