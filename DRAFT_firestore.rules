@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Primitives
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function isEmailVerified() { return request.auth.token.email_verified == true; }
+
+    // 1. ScheduledPost Validation
+    function isValidScheduledPost(data) {
+      return data.keys().hasAll(['content', 'platform', 'time', 'status', 'userId', 'createdAt', 'updatedAt'])
+        && data.keys().size() == 7
+        && data.content is string && data.content.size() <= 5000
+        && data.platform in ['facebook', 'instagram', 'email']
+        && data.time is string && data.time.size() <= 100
+        && data.status in ['pending', 'sent', 'failed']
+        && data.userId == request.auth.uid
+        && data.userId is string && data.userId.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /scheduled_posts/{postId} {
+      allow get: if isOwner(existing().userId) && isValidId(postId);
+      allow list: if isOwner(resource.data.userId); // Secure list query enforcer
+      
+      allow create: if isSignedIn() 
+        && isEmailVerified()
+        && isValidId(postId)
+        && isValidScheduledPost(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isOwner(existing().userId)
+        && isValidId(postId)
+        && isValidScheduledPost(incoming())
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Update Metadata
+          (incoming().diff(existing()).affectedKeys().hasOnly(['content', 'time', 'platform', 'updatedAt'])) ||
+          // Action: Update Status
+          (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) && existing().status == 'pending')
+        );
+
+      allow delete: if isOwner(existing().userId) && isValidId(postId);
+    }
+
+    // 2. UserSetting Validation
+    function isValidUserSetting(data) {
+      return data.userId == request.auth.uid
+        && (data.keys().hasOnly(['resendApiKey', 'fbAccessToken', 'pageId', 'igAccountId', 'userId']))
+        && (!('resendApiKey' in data) || (data.resendApiKey is string && data.resendApiKey.size() <= 512))
+        && (!('fbAccessToken' in data) || (data.fbAccessToken is string && data.fbAccessToken.size() <= 1024))
+        && (!('pageId' in data) || (data.pageId is string && data.pageId.size() <= 128))
+        && (!('igAccountId' in data) || (data.igAccountId is string && data.igAccountId.size() <= 128));
+    }
+
+    match /user_settings/{userId} {
+      allow get, write: if isOwner(userId) && isValidId(userId);
+      // Extra validation on write
+      allow create, update: if isOwner(userId) && isValidUserSetting(incoming());
+    }
+  }
+}

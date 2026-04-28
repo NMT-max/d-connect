@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "ScheduledPost": {
+      "title": "Scheduled Post",
+      "description": "A marketing post scheduled for a specific platform and time.",
+      "type": "object",
+      "properties": {
+        "content": { "type": "string", "description": "The message content." },
+        "platform": { "type": "string", "enum": ["facebook", "instagram", "email"], "description": "Target platform." },
+        "time": { "type": "string", "format": "date-time", "description": "Scheduled time." },
+        "status": { "type": "string", "enum": ["pending", "sent", "failed"], "description": "Execution status." },
+        "userId": { "type": "string", "description": "The UID of the user who scheduled it." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp." }
+      },
+      "required": ["content", "platform", "time", "status", "userId", "createdAt", "updatedAt"]
+    },
+    "UserSetting": {
+      "title": "User Setting",
+      "description": "User specific configurations like API keys.",
+      "type": "object",
+      "properties": {
+        "resendApiKey": { "type": "string" },
+        "fbAccessToken": { "type": "string" },
+        "pageId": { "type": "string" },
+        "igAccountId": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["userId"]
+    }
+  },
+  "firestore": {
+    "/scheduled_posts/{postId}": {
+      "schema": "ScheduledPost",
+      "description": "Collection of scheduled marketing tasks."
+    },
+    "/user_settings/{userId}": {
+      "schema": "UserSetting",
+      "description": "Private user settings and API keys."
+    }
+  }
+}
