@@ -6,7 +6,8 @@
       "type": "object",
       "properties": {
         "content": { "type": "string", "description": "The message content." },
-        "platform": { "type": "string", "enum": ["facebook", "instagram", "email"], "description": "Target platform." },
+        "platform": { "type": "string", "enum": ["facebook", "instagram", "email", "whatsapp"], "description": "Target platform." },
+        "target": { "type": "string", "description": "The recipient number or ID." },
         "time": { "type": "string", "format": "date-time", "description": "Scheduled time." },
         "status": { "type": "string", "enum": ["pending", "sent", "failed"], "description": "Execution status." },
         "userId": { "type": "string", "description": "The UID of the user who scheduled it." },

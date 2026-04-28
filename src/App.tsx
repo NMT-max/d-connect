@@ -420,7 +420,25 @@ function AIView({ prompt, setPrompt, channel, setChannel, language, setLanguage,
   );
 }
 
-function ScheduleDashboard({ posts, deletePost }: { posts: any[], deletePost: (id: string) => void }) {
+  const completeTask = async (id: string) => {
+    try {
+      await setDoc(doc(db, 'scheduled_posts', id), { status: 'sent', updatedAt: serverTimestamp() }, { merge: true });
+    } catch (error) {
+      console.error("Error updating status:", error);
+    }
+  };
+
+  function ScheduleDashboard({ posts, deletePost }: { posts: any[], deletePost: (id: string) => void }) {
+  const executeWhatsApp = (post: any) => {
+    const encodedMsg = encodeURIComponent(post.content);
+    if (post.mediaUrl) {
+      navigator.clipboard.writeText(post.mediaUrl);
+      alert('Image URL copied to clipboard! Now paste it in the WhatsApp chat.');
+    }
+    window.open(`https://web.whatsapp.com/send?phone=${post.target}&text=${encodedMsg}`, '_blank');
+    completeTask(post.id);
+  };
+
   return (
     <div className="bg-navy-800 border border-navy-700 rounded-3xl overflow-hidden shadow-2xl">
       <div className="p-8 border-b border-navy-700 flex justify-between items-center">
@@ -435,7 +453,7 @@ function ScheduleDashboard({ posts, deletePost }: { posts: any[], deletePost: (i
             <tr>
               <th className="px-8 py-4">Status</th>
               <th className="px-8 py-4">Platform</th>
-              <th className="px-8 py-4">Scheduled Time</th>
+              <th className="px-8 py-4">Target Recipient</th>
               <th className="px-8 py-4">Snippet</th>
               <th className="px-8 py-4">Actions</th>
             </tr>
@@ -456,11 +474,16 @@ function ScheduleDashboard({ posts, deletePost }: { posts: any[], deletePost: (i
                   </span>
                 </td>
                 <td className="px-8 py-4 capitalize font-medium text-slate-400">{post.platform}</td>
-                <td className="px-8 py-4 text-sm font-mono text-slate-500">{new Date(post.time).toLocaleString()}</td>
+                <td className="px-8 py-4 text-xs font-mono text-slate-500">{post.target || 'N/A'}</td>
                 <td className="px-8 py-4 max-w-[200px] truncate text-slate-300 italic">"{post.content}"</td>
                 <td className="px-8 py-4">
                   <div className="flex gap-2">
-                    <button onClick={() => deletePost(post.id)} className="p-2 text-slate-500 hover:text-red-400 transition-colors"><X size={16} /></button>
+                    {post.platform === 'whatsapp' && post.status === 'pending' && (
+                      <button onClick={() => executeWhatsApp(post)} className="p-2 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors" title="Launch WhatsApp Web">
+                        <Send size={16} />
+                      </button>
+                    )}
+                    <button onClick={() => deletePost(post.id)} className="p-2 text-slate-400 hover:text-red-400 transition-colors"><X size={16} /></button>
                   </div>
                 </td>
               </tr>
@@ -792,6 +815,7 @@ function WhatsAppView({ onSchedule }: { onSchedule: (post: any) => void }) {
   const [accountAge, setAccountAge] = useState(1);
   const [contacts, setContacts] = useState<string>('');
   const [rawMessage, setRawMessage] = useState('');
+  const [imageUrl, setImageUrl] = useState(''); 
   const [minDelay, setMinDelay] = useState(20);
   const [maxDelay, setMaxDelay] = useState(60);
 
@@ -822,21 +846,22 @@ function WhatsAppView({ onSchedule }: { onSchedule: (post: any) => void }) {
       const personalizedMsg = parseSpintax(rawMessage).replace(/\[Name\]/g, contact.split(',')[1] || 'Customer');
       const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay);
       
-      // Advance time for the next message
       currentTime = new Date(currentTime.getTime() + delay * 1000);
 
       onSchedule({
         content: personalizedMsg,
+        mediaUrl: imageUrl,
         platform: 'whatsapp',
         time: currentTime.toISOString(),
-        target: contact.split(',')[0], // The phone number
+        target: contact.split(',')[0],
         status: 'pending'
       });
     });
 
-    alert(`${contactList.length} messages added to schedule with smart delays!`);
+    alert(`${contactList.length} messages added to schedule!`);
     setContacts('');
     setRawMessage('');
+    setImageUrl('');
   };
 
   return (
@@ -861,7 +886,10 @@ function WhatsAppView({ onSchedule }: { onSchedule: (post: any) => void }) {
               <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20">
                 <p className="text-xs text-slate-400">Safe limit for today:</p>
                 <p className="text-xl font-bold text-emerald-500">{dailyLimit} Messages</p>
-                <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-tighter">Recommended for new account</p>
+                <div className="mt-2 p-2 bg-navy-900 rounded-lg">
+                  <p className="text-[9px] text-slate-600 font-mono">Sender: +8801775939996</p>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-tighter">Recommended for your node</p>
               </div>
             </div>
           </section>
@@ -912,10 +940,20 @@ function WhatsAppView({ onSchedule }: { onSchedule: (post: any) => void }) {
                   placeholder="{Hi|Hello|Hey} [Name], check out our new offer!"
                   className="w-full h-32 bg-navy-900 border border-navy-700 rounded-2xl p-4 outline-none focus:border-gold-500/50 resize-none text-sm"
                 />
-                <div className="mt-2 flex gap-2">
-                  <span className="text-[10px] bg-navy-900 px-2 py-1 rounded text-slate-500">Use {'{A|B}'} for options</span>
-                  <span className="text-[10px] bg-navy-900 px-2 py-1 rounded text-slate-500">Use [Name] for personality</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Image URL (Optional)</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    placeholder="https://example.com/image.jpg"
+                    className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50 text-sm"
+                  />
                 </div>
+                <p className="text-[10px] text-slate-600 mt-2 italic">Note: WhatsApp Web requires manual attachment, but we will provide the link for easy copying.</p>
               </div>
 
               <button 
