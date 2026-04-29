@@ -78,6 +78,7 @@ export default function App() {
   const [igAccountId, setIgAccountId] = useState('');
   const [whatsappToken, setWhatsappToken] = useState('');
   const [whatsappPhoneId, setWhatsappPhoneId] = useState('');
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
 
   // Scheduling State
   const [scheduledPosts, setScheduledPosts] = useState<any[]>([]);
@@ -108,6 +109,7 @@ export default function App() {
           setIgAccountId(data.igAccountId || '');
           setWhatsappToken(data.whatsappToken || '');
           setWhatsappPhoneId(data.whatsappPhoneId || '');
+          setN8nWebhookUrl(data.n8nWebhookUrl || '');
         }
       } catch (error) {
         console.error("Error fetching settings:", error);
@@ -202,7 +204,8 @@ export default function App() {
         pageId,
         igAccountId,
         whatsappToken,
-        whatsappPhoneId
+        whatsappPhoneId,
+        n8nWebhookUrl
       });
       alert('Settings saved to cloud!');
     } catch (error) {
@@ -350,9 +353,10 @@ export default function App() {
                   onComplete={completeTask}
                   whatsappToken={whatsappToken}
                   whatsappPhoneId={whatsappPhoneId}
+                  n8nWebhookUrl={n8nWebhookUrl}
                 />
               )}
-              {activeModule === 'email' && <EmailView apiKey={resendApiKey} setApiKey={setResendApiKey} onSave={saveSettings} />}
+              {activeModule === 'email' && <EmailView apiKey={resendApiKey} setApiKey={setResendApiKey} n8nWebhook={n8nWebhookUrl} onSave={saveSettings} />}
               {activeModule === 'social' && (
                 <SocialView 
                   fbToken={fbAccessToken} setFbToken={setFbAccessToken} 
@@ -360,6 +364,7 @@ export default function App() {
                   igId={igAccountId} setIgId={setIgAccountId} 
                   waToken={whatsappToken} setWaToken={setWhatsappToken}
                   waPhoneId={whatsappPhoneId} setWaPhoneId={setWhatsappPhoneId}
+                  n8nWebhook={n8nWebhookUrl} setN8nWebhook={setN8nWebhookUrl}
                   onSave={saveSettings} 
                 />
               )}
@@ -593,47 +598,76 @@ function ScheduleDashboard({ posts, deletePost, whatsappToken, whatsappPhoneId }
   );
 }
 
-function EmailView({ apiKey, setApiKey, onSave }: any) {
+function EmailView({ apiKey, setApiKey, n8nWebhook, onSave }: any) {
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [sendMethod, setSendMethod] = useState<'resend' | 'n8n'>(n8nWebhook ? 'n8n' : 'resend');
 
   const sendEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!apiKey || !to || !subject || !body) {
-      alert('Missing API Key, Recipient, Subject or Body');
-      return;
+    
+    if (sendMethod === 'resend') {
+      if (!apiKey || !to || !subject || !body) {
+        alert('Missing API Key, Recipient, Subject or Body');
+        return;
+      }
+    } else {
+      if (!n8nWebhook || !to || !subject || !body) {
+        alert('Missing n8n Webhook, Recipient, Subject or Body');
+        return;
+      }
     }
 
     setIsSending(true);
     try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          from: 'Digicoup <onboarding@resend.dev>', // Resend default for free plan
-          to: [to],
-          subject: subject,
-          html: body.replace(/\n/g, '<br/>')
-        })
-      });
+      if (sendMethod === 'resend') {
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            from: 'Digicoup <onboarding@resend.dev>',
+            to: [to],
+            subject: subject,
+            html: body.replace(/\n/g, '<br/>')
+          })
+        });
 
-      const data = await response.json();
-      if (response.ok) {
-        alert('Email sent successfully! ID: ' + data.id);
-        setTo('');
-        setSubject('');
-        setBody('');
+        const data = await response.json();
+        if (response.ok) {
+          alert('Email sent via Resend! ID: ' + data.id);
+        } else {
+          throw new Error(data.message || 'Failed to send email');
+        }
       } else {
-        throw new Error(data.message || 'Failed to send email');
+        const response = await fetch(n8nWebhook, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            platform: 'email',
+            to: to,
+            subject: subject,
+            body: body,
+            html: body.replace(/\n/g, '<br/>')
+          })
+        });
+        if (response.ok) {
+          alert('Forwarded to n8n successfully!');
+        } else {
+          alert('n8n rejected the email request.');
+        }
       }
+      
+      setTo('');
+      setSubject('');
+      setBody('');
     } catch (error: any) {
-      console.error("Resend Error:", error);
-      alert('Error: ' + error.message + '. (Note: Free plans often require domain verification)');
+      console.error("Email Error:", error);
+      alert('Error: ' + error.message);
     } finally {
       setIsSending(false);
     }
@@ -642,25 +676,53 @@ function EmailView({ apiKey, setApiKey, onSave }: any) {
   return (
     <div className="max-w-4xl space-y-6 pb-20">
       <div className="bg-navy-800 border border-navy-700 rounded-3xl p-8 mb-6">
-        <h3 className="text-sm font-bold uppercase text-slate-600 mb-4 tracking-widest flex justify-between items-center">
-          Resend Configuration
-          <button onClick={onSave} className="text-[10px] bg-gold-500 text-navy-900 px-3 py-1 rounded-full hover:scale-105 transition-all">Save Key</button>
-        </h3>
-        <div className="flex gap-4">
-          <input 
-            type="password" 
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Resend API Key (re_...)"
-            className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50 text-sm"
-          />
+        <div className="flex justify-between items-center mb-6">
+           <h3 className="text-xs font-bold uppercase text-slate-500 tracking-widest flex items-center gap-2">
+             <Settings size={14} /> Send Infrastructure
+           </h3>
+           <div className="flex bg-navy-900 p-1 rounded-lg border border-navy-700">
+              <button 
+                onClick={() => setSendMethod('resend')}
+                className={`px-4 py-1.5 rounded-md text-[10px] font-bold transition-all ${sendMethod === 'resend' ? 'bg-blue-500 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+              >Resend API</button>
+              <button 
+                onClick={() => setSendMethod('n8n')}
+                className={`px-4 py-1.5 rounded-md text-[10px] font-bold transition-all ${sendMethod === 'n8n' ? 'bg-indigo-500 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+              >n8n Webhook</button>
+           </div>
         </div>
+
+        {sendMethod === 'resend' ? (
+          <div className="flex gap-4">
+            <input 
+              type="password" 
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Resend API Key (re_...)"
+              className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-gold-500/50 text-sm"
+            />
+            <button onClick={onSave} className="bg-gold-500 text-navy-900 px-6 py-2 rounded-xl font-bold hover:scale-105 transition-all text-sm">Save Key</button>
+          </div>
+        ) : (
+          <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-between">
+             <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-500 rounded-lg"><Zap size={20} className="text-white" /></div>
+                <div>
+                   <p className="text-xs font-bold text-white">n8n Engine Active</p>
+                   <p className="text-[10px] text-slate-400">Webhook: {n8nWebhook ? n8nWebhook.substring(0, 40) + '...' : 'Missing! Set in Social Hub'}</p>
+                </div>
+             </div>
+             {!n8nWebhook && <p className="text-[10px] text-red-400 font-bold animate-pulse">SET WEBHOOK IN SOCIAL HUB</p>}
+          </div>
+        )}
       </div>
       
       <div className="bg-navy-800 border border-navy-700 rounded-3xl p-8 shadow-2xl">
         <div className="flex items-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center"><Mail className="text-blue-500" /></div>
-          <div><h2 className="text-xl font-bold">Resend Email Campaign</h2><p className="text-sm text-slate-500">Direct integration with Resend.com infrastructure.</p></div>
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${sendMethod === 'resend' ? 'bg-blue-500/20' : 'bg-indigo-500/20'}`}>
+            {sendMethod === 'resend' ? <Mail className="text-blue-500" /> : <Zap className="text-indigo-500" />}
+          </div>
+          <div><h2 className="text-xl font-bold">Smart Email Campaign</h2><p className="text-sm text-slate-500">Fast, reliable distribution across multiple regions.</p></div>
         </div>
         <form className="space-y-4" onSubmit={sendEmail}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -698,7 +760,7 @@ function EmailView({ apiKey, setApiKey, onSave }: any) {
   );
 }
 
-function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waToken, setWaToken, waPhoneId, setWaPhoneId, onSave }: any) {
+function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waToken, setWaToken, waPhoneId, setWaPhoneId, n8nWebhook, setN8nWebhook, onSave }: any) {
   const [content, setContent] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [isPosting, setIsPosting] = useState(false);
@@ -821,6 +883,48 @@ function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waT
             <p className="text-[9px] text-slate-500 italic mt-2">
               💡 Note: If using a Meta Test Number, you must first verify the recipient number in your Meta Dashboard. Direct messages require an active "Conversation Window" (user must message you first) unless using Templates.
             </p>
+          </div>
+
+          <div className="space-y-4">
+             <h4 className="text-[10px] uppercase font-black text-slate-500 tracking-widest flex items-center gap-2">
+               <Zap size={12} className="text-indigo-500" /> n8n Automation Engine
+             </h4>
+             <div className="flex gap-2">
+               <input 
+                type="text" 
+                value={n8nWebhook} 
+                onChange={(e) => setN8nWebhook(e.target.value)} 
+                placeholder="n8n Webhook URL" 
+                className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500/50 text-sm" 
+              />
+              <button 
+                onClick={async () => {
+                  if (!n8nWebhook) return alert("Please enter webhook URL first.");
+                  try {
+                    const res = await fetch(n8nWebhook, {
+                      method: 'POST',
+                      headers: {'Content-Type': 'application/json'},
+                      body: JSON.stringify({ test: true, source: 'Digicoup', timestamp: Date.now() })
+                    });
+                    alert(res.ok ? "n8n Connection Successful!" : "n8n returned an error. Check your workflow activation.");
+                  } catch(e) { alert("Failed to reach n8n. Check URL and CORS settings."); }
+                }}
+                className="px-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl text-[10px] font-bold hover:bg-indigo-500 hover:text-white transition-all"
+              >
+                TEST
+              </button>
+            </div>
+            <div className="bg-indigo-500/5 border border-indigo-500/10 p-3 rounded-xl">
+               <p className="text-[10px] text-indigo-400 font-bold uppercase mb-1 flex items-center gap-1">
+                 <AlertCircle size={12} /> n8n Setup Guide:
+               </p>
+               <ul className="text-[9px] text-slate-500 space-y-1">
+                 <li>1. Create a "Webhook" node in n8n.</li>
+                 <li>2. Method: POST | Content: JSON.</li>
+                 <li>3. Output to "WhatsApp Business API" or "Send Email" node.</li>
+                 <li>4. Activate the workflow and paste the Production URL here.</li>
+               </ul>
+            </div>
           </div>
         </div>
       </section>
@@ -950,7 +1054,7 @@ function StatCard({ title, value, subValue, icon }: { title: string, value: stri
   );
 }
 
-function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken, whatsappPhoneId }: { onSchedule: (post: any) => void, posts: any[], deletePost: (id: string) => void, onComplete: (id: string) => void, whatsappToken: string, whatsappPhoneId: string }) {
+function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken, whatsappPhoneId, n8nWebhookUrl }: { onSchedule: (post: any) => void, posts: any[], deletePost: (id: string) => void, onComplete: (id: string) => void, whatsappToken: string, whatsappPhoneId: string, n8nWebhookUrl: string }) {
   const [accountAge, setAccountAge] = useState(1);
   const [contacts, setContacts] = useState<string>('');
   const [rawMessage, setRawMessage] = useState('');
@@ -960,8 +1064,8 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
   const [scheduledTime, setScheduledTime] = useState('');
   const [isAutomating, setIsAutomating] = useState(false);
   const [lastApiStatus, setLastApiStatus] = useState<{success: boolean, message: string} | null>(null);
-  const [automationMode, setAutomationMode] = useState<'api' | 'manual'>(
-    window.location.hostname.includes('vercel.app') ? 'manual' : 'api'
+  const [automationMode, setAutomationMode] = useState<'api' | 'manual' | 'n8n'>(
+    n8nWebhookUrl ? 'n8n' : (window.location.hostname.includes('vercel.app') ? 'manual' : 'api')
   );
 
   const whatsappPosts = posts.filter(p => p.platform === 'whatsapp');
@@ -994,6 +1098,7 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [readyForManualPush, setReadyForManualPush] = useState<any>(null);
+  const [n8nStatus, setN8nStatus] = useState<{success: boolean, message: string} | null>(null);
 
   // Auto-Automation Logic
   useEffect(() => {
@@ -1063,8 +1168,13 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                 console.error("API Error Data:", data);
                 setIsAutomating(false);
                 const errorObj = data.error || data;
-                const errMsg = errorObj.error_user_msg || errorObj.message || (typeof errorObj === 'string' ? errorObj : 'Failed to send');
-                setLastApiStatus({ success: false, message: `Meta: ${errMsg}` });
+                let errMsg = errorObj.error_user_msg || errorObj.message || (typeof errorObj === 'string' ? errorObj : 'Failed to send');
+                
+                if (errMsg.includes('131030') || errMsg.includes('allowed list')) {
+                   errMsg = "META SANDBOX LIMIT: You must add this number to your 'Allowed List' in the Meta Developer Dashboard to send messages in test mode.";
+                }
+
+                setLastApiStatus({ success: false, message: `Meta Error: ${errMsg.substring(0, 40)}...` });
                 alert('WhatsApp API Error: ' + errMsg);
               }
             } catch (e: any) {
@@ -1072,6 +1182,40 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
               setIsAutomating(false);
               setLastApiStatus({ success: false, message: 'Server connection failed.' });
               alert(`Connection Error to Backend: ${e.message}. For Cloud API, use the AI Studio preview URL.`);
+            } finally {
+              setIsSending(false);
+              if (pendingPosts.length === 1) {
+                setIsAutomating(false);
+                setCurrentAutoTarget(null);
+              }
+            }
+          } else if (automationMode === 'n8n') {
+            if (!n8nWebhookUrl) {
+              alert('Please set your n8n Webhook URL in Social Hub settings.');
+              setIsAutomating(false);
+              return;
+            }
+            setIsSending(true);
+            try {
+              const res = await fetch(n8nWebhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  to: nextPost.target,
+                  message: nextPost.content,
+                  mediaUrl: nextPost.mediaUrl,
+                  platform: 'whatsapp',
+                  user: whatsappPhoneId
+                })
+              });
+              if (res.ok) {
+                onComplete(nextPost.id);
+                setN8nStatus({ success: true, message: 'Forwarded to n8n.' });
+              } else {
+                setN8nStatus({ success: false, message: 'n8n rejected request.' });
+              }
+            } catch (e: any) {
+              setN8nStatus({ success: false, message: 'n8n connection failed.' });
             } finally {
               setIsSending(false);
               if (pendingPosts.length === 1) {
@@ -1336,6 +1480,10 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                        <p className="text-xs text-white font-bold italic">🚀 SENDING MODE:</p>
                        <div className="flex bg-navy-800 rounded-lg p-1">
                           <button 
+                            onClick={() => setAutomationMode('n8n')}
+                            className={`px-3 py-1 text-[10px] rounded-md transition-all ${automationMode === 'n8n' ? 'bg-indigo-500 text-white font-bold animate-pulse' : 'text-slate-400'}`}
+                          >n8n (Recommended)</button>
+                          <button 
                             onClick={() => setAutomationMode('api')}
                             className={`px-3 py-1 text-[10px] rounded-md transition-all ${automationMode === 'api' ? 'bg-gold-500 text-navy-900 font-bold' : 'text-slate-400'}`}
                           >Cloud API</button>
@@ -1346,8 +1494,22 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                        </div>
                     </div>
                     
-                    {automationMode === 'api' ? (
+                     {automationMode === 'api' ? (
                       <>
+                        <div className="bg-blue-500/10 border border-blue-500/30 p-3 rounded-xl mb-3">
+                           <p className="text-[10px] text-blue-400 font-bold uppercase mb-1 flex items-center gap-1">
+                              <Settings size={12} /> Meta Dashboard Guide
+                           </p>
+                           <p className="text-[9px] text-slate-400 leading-tight">
+                              If using a **Test Number**, go to Meta Developer Dashboard and add the recipient to your <b>Allowed List</b>.
+                           </p>
+                           <a 
+                             href="https://developers.facebook.com/apps/" 
+                             target="_blank" 
+                             className="text-[9px] text-gold-500 underline mt-1 block"
+                           >Open Meta Dashboard →</a>
+                        </div>
+
                         {window.location.hostname.includes('vercel.app') && (
                           <div className="bg-red-500/20 border border-red-500/50 p-3 rounded-xl mb-3">
                             <p className="text-[10px] text-red-500 font-bold uppercase mb-1">⚠️ Environment Mismatch</p>
@@ -1395,6 +1557,16 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                           </button>
                         </div>
                       </>
+                    ) : automationMode === 'n8n' ? (
+                      <div className="space-y-3">
+                        <p className="text-[10px] text-indigo-400 font-bold uppercase mb-1">n8n Workflow Active</p>
+                        <p className="text-[9px] text-slate-400 leading-tight">Digicoup is sending data to your n8n webhook. Make sure your server is listening.</p>
+                        {n8nStatus && (
+                          <div className={`mt-2 p-2 rounded text-[10px] font-mono ${n8nStatus.success ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-500 border border-red-500/30'}`}>
+                            {n8nStatus.success ? '✓ ' : '✗ ERROR: '}{n8nStatus.message}
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <div className="space-y-3">
                         <p className="text-[10px] text-slate-400 leading-relaxed uppercase tracking-tighter">
