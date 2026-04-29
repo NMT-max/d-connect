@@ -78,7 +78,7 @@ export default function App() {
   const [igAccountId, setIgAccountId] = useState('');
   const [whatsappToken, setWhatsappToken] = useState('');
   const [whatsappPhoneId, setWhatsappPhoneId] = useState('');
-  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
+  const [makeWebhookUrl, setMakeWebhookUrl] = useState('');
 
   // Scheduling State
   const [scheduledPosts, setScheduledPosts] = useState<any[]>([]);
@@ -109,7 +109,7 @@ export default function App() {
           setIgAccountId(data.igAccountId || '');
           setWhatsappToken(data.whatsappToken || '');
           setWhatsappPhoneId(data.whatsappPhoneId || '');
-          setN8nWebhookUrl(data.n8nWebhookUrl || '');
+          setMakeWebhookUrl(data.makeWebhookUrl || '');
         }
       } catch (error) {
         console.error("Error fetching settings:", error);
@@ -205,7 +205,7 @@ export default function App() {
         igAccountId,
         whatsappToken,
         whatsappPhoneId,
-        n8nWebhookUrl
+        makeWebhookUrl
       });
       alert('Settings saved to cloud!');
     } catch (error) {
@@ -353,10 +353,10 @@ export default function App() {
                   onComplete={completeTask}
                   whatsappToken={whatsappToken}
                   whatsappPhoneId={whatsappPhoneId}
-                  n8nWebhookUrl={n8nWebhookUrl}
+                  makeWebhookUrl={makeWebhookUrl}
                 />
               )}
-              {activeModule === 'email' && <EmailView apiKey={resendApiKey} setApiKey={setResendApiKey} n8nWebhook={n8nWebhookUrl} onSave={saveSettings} />}
+              {activeModule === 'email' && <EmailView apiKey={resendApiKey} setApiKey={setResendApiKey} makeWebhook={makeWebhookUrl} onSave={saveSettings} />}
               {activeModule === 'social' && (
                 <SocialView 
                   fbToken={fbAccessToken} setFbToken={setFbAccessToken} 
@@ -364,7 +364,7 @@ export default function App() {
                   igId={igAccountId} setIgId={setIgAccountId} 
                   waToken={whatsappToken} setWaToken={setWhatsappToken}
                   waPhoneId={whatsappPhoneId} setWaPhoneId={setWhatsappPhoneId}
-                  n8nWebhook={n8nWebhookUrl} setN8nWebhook={setN8nWebhookUrl}
+                  makeWebhook={makeWebhookUrl} setMakeWebhook={setMakeWebhookUrl}
                   onSave={saveSettings} 
                 />
               )}
@@ -598,12 +598,12 @@ function ScheduleDashboard({ posts, deletePost, whatsappToken, whatsappPhoneId }
   );
 }
 
-function EmailView({ apiKey, setApiKey, n8nWebhook, onSave }: any) {
+function EmailView({ apiKey, setApiKey, makeWebhook, onSave }: any) {
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [sendMethod, setSendMethod] = useState<'resend' | 'n8n'>(n8nWebhook ? 'n8n' : 'resend');
+  const [sendMethod, setSendMethod] = useState<'resend' | 'make'>(makeWebhook ? 'make' : 'resend');
 
   const sendEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -614,8 +614,8 @@ function EmailView({ apiKey, setApiKey, n8nWebhook, onSave }: any) {
         return;
       }
     } else {
-      if (!n8nWebhook || !to || !subject || !body) {
-        alert('Missing n8n Webhook, Recipient, Subject or Body');
+      if (!makeWebhook || !to || !subject || !body) {
+        alert('Missing Make.com Webhook, Recipient, Subject or Body');
         return;
       }
     }
@@ -644,7 +644,7 @@ function EmailView({ apiKey, setApiKey, n8nWebhook, onSave }: any) {
           throw new Error(data.message || 'Failed to send email');
         }
       } else {
-        const response = await fetch(n8nWebhook, {
+        const response = await fetch(makeWebhook, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -656,9 +656,9 @@ function EmailView({ apiKey, setApiKey, n8nWebhook, onSave }: any) {
           })
         });
         if (response.ok) {
-          alert('Forwarded to n8n successfully!');
+          alert('Forwarded to Make.com successfully!');
         } else {
-          alert('n8n rejected the email request.');
+          alert('Make.com rejected the email request.');
         }
       }
       
@@ -686,9 +686,9 @@ function EmailView({ apiKey, setApiKey, n8nWebhook, onSave }: any) {
                 className={`px-4 py-1.5 rounded-md text-[10px] font-bold transition-all ${sendMethod === 'resend' ? 'bg-blue-500 text-white' : 'text-slate-500 hover:text-slate-300'}`}
               >Resend API</button>
               <button 
-                onClick={() => setSendMethod('n8n')}
-                className={`px-4 py-1.5 rounded-md text-[10px] font-bold transition-all ${sendMethod === 'n8n' ? 'bg-indigo-500 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-              >n8n Webhook</button>
+                onClick={() => setSendMethod('make')}
+                className={`px-4 py-1.5 rounded-md text-[10px] font-bold transition-all ${sendMethod === 'make' ? 'bg-indigo-500 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+              >Make.com</button>
            </div>
         </div>
 
@@ -708,11 +708,11 @@ function EmailView({ apiKey, setApiKey, n8nWebhook, onSave }: any) {
              <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-500 rounded-lg"><Zap size={20} className="text-white" /></div>
                 <div>
-                   <p className="text-xs font-bold text-white">n8n Engine Active</p>
-                   <p className="text-[10px] text-slate-400">Webhook: {n8nWebhook ? n8nWebhook.substring(0, 40) + '...' : 'Missing! Set in Social Hub'}</p>
+                   <p className="text-xs font-bold text-white">Make.com Engine Active</p>
+                   <p className="text-[10px] text-slate-400">Webhook: {makeWebhook ? makeWebhook.substring(0, 40) + '...' : 'Missing! Set in Social Hub'}</p>
                 </div>
              </div>
-             {!n8nWebhook && <p className="text-[10px] text-red-400 font-bold animate-pulse">SET WEBHOOK IN SOCIAL HUB</p>}
+             {!makeWebhook && <p className="text-[10px] text-red-400 font-bold animate-pulse">SET WEBHOOK IN SOCIAL HUB</p>}
           </div>
         )}
       </div>
@@ -760,7 +760,7 @@ function EmailView({ apiKey, setApiKey, n8nWebhook, onSave }: any) {
   );
 }
 
-function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waToken, setWaToken, waPhoneId, setWaPhoneId, n8nWebhook, setN8nWebhook, onSave }: any) {
+function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waToken, setWaToken, waPhoneId, setWaPhoneId, makeWebhook, setMakeWebhook, onSave }: any) {
   const [content, setContent] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [isPosting, setIsPosting] = useState(false);
@@ -887,27 +887,27 @@ function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waT
 
           <div className="space-y-4">
              <h4 className="text-[10px] uppercase font-black text-slate-500 tracking-widest flex items-center gap-2">
-               <Zap size={12} className="text-indigo-500" /> n8n Automation Engine
+               <Zap size={12} className="text-indigo-500" /> Make.com Automation Engine
              </h4>
              <div className="flex gap-2">
                <input 
                 type="text" 
-                value={n8nWebhook} 
-                onChange={(e) => setN8nWebhook(e.target.value)} 
-                placeholder="n8n Webhook URL" 
+                value={makeWebhook} 
+                onChange={(e) => setMakeWebhook(e.target.value)} 
+                placeholder="Make.com Webhook URL" 
                 className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500/50 text-sm" 
               />
               <button 
                 onClick={async () => {
-                  if (!n8nWebhook) return alert("Please enter webhook URL first.");
+                  if (!makeWebhook) return alert("Please enter webhook URL first.");
                   try {
-                    const res = await fetch(n8nWebhook, {
+                    const res = await fetch(makeWebhook, {
                       method: 'POST',
                       headers: {'Content-Type': 'application/json'},
                       body: JSON.stringify({ test: true, source: 'Digicoup', timestamp: Date.now() })
                     });
-                    alert(res.ok ? "n8n Connection Successful!" : "n8n returned an error. Check your workflow activation.");
-                  } catch(e) { alert("Failed to reach n8n. Check URL and CORS settings."); }
+                    alert(res.ok ? "Make.com Connection Successful!" : "Make.com returned an error. Check your workflow activation.");
+                  } catch(e) { alert("Failed to reach Make.com. Check URL and CORS settings."); }
                 }}
                 className="px-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl text-[10px] font-bold hover:bg-indigo-500 hover:text-white transition-all"
               >
@@ -916,14 +916,30 @@ function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waT
             </div>
             <div className="bg-indigo-500/5 border border-indigo-500/10 p-3 rounded-xl">
                <p className="text-[10px] text-indigo-400 font-bold uppercase mb-1 flex items-center gap-1">
-                 <AlertCircle size={12} /> n8n Setup Guide:
+                 <AlertCircle size={12} /> Make.com Setup Guide:
                </p>
                <ul className="text-[9px] text-slate-500 space-y-1">
-                 <li>1. Create a "Webhook" node in n8n.</li>
-                 <li>2. Method: POST | Content: JSON.</li>
-                 <li>3. Output to "WhatsApp Business API" or "Send Email" node.</li>
-                 <li>4. Activate the workflow and paste the Production URL here.</li>
+                 <li>1. Create a new Scenario in Make.com.</li>
+                 <li>2. Add a "Webhooks" module and select "Custom Webhook".</li>
+                 <li>3. Copy the URL and paste it here.</li>
+                 <li>4. Add tools like WhatsApp/Email nodes after the Webhook.</li>
                </ul>
+               <button 
+                 onClick={() => {
+                   const sample = {
+                     platform: "whatsapp",
+                     to: "88017xxxxxxxx",
+                     message: "Hello from Digicoup!",
+                     mediaUrl: "https://example.com/image.jpg",
+                     timestamp: Date.now()
+                   };
+                   navigator.clipboard.writeText(JSON.stringify(sample, null, 2));
+                   alert("Sample JSON copied! Paste this into Make.com 'Determine Data Structure' if needed.");
+                 }}
+                 className="mt-2 text-[8px] bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded uppercase font-bold hover:bg-indigo-500 hover:text-white transition-all"
+               >
+                 Copy Sample Payload (JSON)
+               </button>
             </div>
           </div>
         </div>
@@ -1054,7 +1070,7 @@ function StatCard({ title, value, subValue, icon }: { title: string, value: stri
   );
 }
 
-function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken, whatsappPhoneId, n8nWebhookUrl }: { onSchedule: (post: any) => void, posts: any[], deletePost: (id: string) => void, onComplete: (id: string) => void, whatsappToken: string, whatsappPhoneId: string, n8nWebhookUrl: string }) {
+function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken, whatsappPhoneId, makeWebhookUrl }: { onSchedule: (post: any) => void, posts: any[], deletePost: (id: string) => void, onComplete: (id: string) => void, whatsappToken: string, whatsappPhoneId: string, makeWebhookUrl: string }) {
   const [accountAge, setAccountAge] = useState(1);
   const [contacts, setContacts] = useState<string>('');
   const [rawMessage, setRawMessage] = useState('');
@@ -1064,8 +1080,8 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
   const [scheduledTime, setScheduledTime] = useState('');
   const [isAutomating, setIsAutomating] = useState(false);
   const [lastApiStatus, setLastApiStatus] = useState<{success: boolean, message: string} | null>(null);
-  const [automationMode, setAutomationMode] = useState<'api' | 'manual' | 'n8n'>(
-    n8nWebhookUrl ? 'n8n' : (window.location.hostname.includes('vercel.app') ? 'manual' : 'api')
+  const [automationMode, setAutomationMode] = useState<'api' | 'manual' | 'make'>(
+    makeWebhookUrl ? 'make' : (window.location.hostname.includes('vercel.app') ? 'manual' : 'api')
   );
 
   const whatsappPosts = posts.filter(p => p.platform === 'whatsapp');
@@ -1098,7 +1114,7 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [readyForManualPush, setReadyForManualPush] = useState<any>(null);
-  const [n8nStatus, setN8nStatus] = useState<{success: boolean, message: string} | null>(null);
+  const [makeStatus, setMakeStatus] = useState<{success: boolean, message: string} | null>(null);
 
   // Auto-Automation Logic
   useEffect(() => {
@@ -1189,15 +1205,15 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                 setCurrentAutoTarget(null);
               }
             }
-          } else if (automationMode === 'n8n') {
-            if (!n8nWebhookUrl) {
-              alert('Please set your n8n Webhook URL in Social Hub settings.');
+          } else if (automationMode === 'make') {
+            if (!makeWebhookUrl) {
+              alert('Please set your Make.com Webhook URL in Social Hub settings.');
               setIsAutomating(false);
               return;
             }
             setIsSending(true);
             try {
-              const res = await fetch(n8nWebhookUrl, {
+              const res = await fetch(makeWebhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1210,12 +1226,12 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
               });
               if (res.ok) {
                 onComplete(nextPost.id);
-                setN8nStatus({ success: true, message: 'Forwarded to n8n.' });
+                setMakeStatus({ success: true, message: 'Forwarded to Make.' });
               } else {
-                setN8nStatus({ success: false, message: 'n8n rejected request.' });
+                setMakeStatus({ success: false, message: 'Make.com rejected request.' });
               }
             } catch (e: any) {
-              setN8nStatus({ success: false, message: 'n8n connection failed.' });
+              setMakeStatus({ success: false, message: 'Make connection failed.' });
             } finally {
               setIsSending(false);
               if (pendingPosts.length === 1) {
@@ -1480,9 +1496,9 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                        <p className="text-xs text-white font-bold italic">🚀 SENDING MODE:</p>
                        <div className="flex bg-navy-800 rounded-lg p-1">
                           <button 
-                            onClick={() => setAutomationMode('n8n')}
-                            className={`px-3 py-1 text-[10px] rounded-md transition-all ${automationMode === 'n8n' ? 'bg-indigo-500 text-white font-bold animate-pulse' : 'text-slate-400'}`}
-                          >n8n (Recommended)</button>
+                            onClick={() => setAutomationMode('make')}
+                            className={`px-3 py-1 text-[10px] rounded-md transition-all ${automationMode === 'make' ? 'bg-indigo-500 text-white font-bold animate-pulse' : 'text-slate-400'}`}
+                          >Make.com (Fastest)</button>
                           <button 
                             onClick={() => setAutomationMode('api')}
                             className={`px-3 py-1 text-[10px] rounded-md transition-all ${automationMode === 'api' ? 'bg-gold-500 text-navy-900 font-bold' : 'text-slate-400'}`}
@@ -1557,13 +1573,13 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                           </button>
                         </div>
                       </>
-                    ) : automationMode === 'n8n' ? (
+                    ) : automationMode === 'make' ? (
                       <div className="space-y-3">
-                        <p className="text-[10px] text-indigo-400 font-bold uppercase mb-1">n8n Workflow Active</p>
-                        <p className="text-[9px] text-slate-400 leading-tight">Digicoup is sending data to your n8n webhook. Make sure your server is listening.</p>
-                        {n8nStatus && (
-                          <div className={`mt-2 p-2 rounded text-[10px] font-mono ${n8nStatus.success ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-500 border border-red-500/30'}`}>
-                            {n8nStatus.success ? '✓ ' : '✗ ERROR: '}{n8nStatus.message}
+                        <p className="text-[10px] text-indigo-400 font-bold uppercase mb-1">Make.com Scenario Active</p>
+                        <p className="text-[9px] text-slate-400 leading-tight">Digicoup is sending data to your Make.com webhook. Ensure your scenario is active.</p>
+                        {makeStatus && (
+                          <div className={`mt-2 p-2 rounded text-[10px] font-mono ${makeStatus.success ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-500 border border-red-500/30'}`}>
+                            {makeStatus.success ? '✓ ' : '✗ ERROR: '}{makeStatus.message}
                           </div>
                         )}
                       </div>
