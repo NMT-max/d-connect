@@ -23,7 +23,8 @@ import {
   X,
   LogOut,
   User as UserIcon,
-  ExternalLink
+  ExternalLink,
+  ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { generateMarketingContent } from './lib/gemini';
@@ -363,7 +364,15 @@ export default function App() {
                   activepiecesWebhookUrl={activepiecesWebhookUrl}
                 />
               )}
-              {activeModule === 'email' && <EmailView apiKey={resendApiKey} setApiKey={setResendApiKey} activepiecesWebhook={activepiecesWebhookUrl} onSave={saveSettings} />}
+              {activeModule === 'email' && (
+                <EmailView 
+                  apiKey={resendApiKey} 
+                  setApiKey={setResendApiKey} 
+                  activepiecesWebhook={activepiecesWebhookUrl} 
+                  onNavigate={setActiveModule}
+                  onSave={saveSettings} 
+                />
+              )}
               {activeModule === 'social' && (
                 <SocialView 
                   fbToken={fbAccessToken} setFbToken={setFbAccessToken} 
@@ -605,7 +614,7 @@ function ScheduleDashboard({ posts, deletePost, whatsappToken, whatsappPhoneId }
   );
 }
 
-function EmailView({ apiKey, setApiKey, activepiecesWebhook, onSave }: any) {
+function EmailView({ apiKey, setApiKey, activepiecesWebhook, onNavigate, onSave }: any) {
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -719,7 +728,14 @@ function EmailView({ apiKey, setApiKey, activepiecesWebhook, onSave }: any) {
                    <p className="text-[10px] text-slate-400">Webhook: {activepiecesWebhook ? activepiecesWebhook.substring(0, 40) + '...' : 'Missing! Set in Social Hub'}</p>
                 </div>
              </div>
-             {!activepiecesWebhook && <p className="text-[10px] text-red-400 font-bold animate-pulse">SET WEBHOOK IN SOCIAL HUB</p>}
+             {!activepiecesWebhook && (
+               <button 
+                 onClick={() => onNavigate('social')}
+                 className="text-[10px] text-red-400 font-black animate-pulse hover:underline flex items-center gap-1"
+               >
+                 <ArrowRight size={12} /> SET WEBHOOK IN SOCIAL HUB
+               </button>
+             )}
           </div>
         )}
       </div>
