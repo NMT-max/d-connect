@@ -78,7 +78,7 @@ export default function App() {
   const [igAccountId, setIgAccountId] = useState('');
   const [whatsappToken, setWhatsappToken] = useState('');
   const [whatsappPhoneId, setWhatsappPhoneId] = useState('');
-  const [makeWebhookUrl, setMakeWebhookUrl] = useState('');
+  const [activepiecesWebhookUrl, setActivepiecesWebhookUrl] = useState('');
 
   // Scheduling State
   const [scheduledPosts, setScheduledPosts] = useState<any[]>([]);
@@ -109,7 +109,7 @@ export default function App() {
           setIgAccountId(data.igAccountId || '');
           setWhatsappToken(data.whatsappToken || '');
           setWhatsappPhoneId(data.whatsappPhoneId || '');
-          setMakeWebhookUrl(data.makeWebhookUrl || '');
+          setActivepiecesWebhookUrl(data.activepiecesWebhookUrl || '');
         }
       } catch (error) {
         console.error("Error fetching settings:", error);
@@ -205,7 +205,7 @@ export default function App() {
         igAccountId,
         whatsappToken,
         whatsappPhoneId,
-        makeWebhookUrl
+        activepiecesWebhookUrl
       });
       alert('Settings saved to cloud!');
     } catch (error) {
@@ -344,7 +344,14 @@ export default function App() {
         <div className="p-8">
           <AnimatePresence mode="wait">
             <motion.div key={activeModule} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
-              {activeModule === 'dashboard' && <DashboardView posts={scheduledPosts} deletePost={deletePost} />}
+              {activeModule === 'dashboard' && (
+                <DashboardView 
+                  posts={scheduledPosts} 
+                  deletePost={deletePost} 
+                  whatsappToken={whatsappToken}
+                  whatsappPhoneId={whatsappPhoneId}
+                />
+              )}
               {activeModule === 'whatsapp' && (
                 <WhatsAppView 
                   onSchedule={saveScheduledPost} 
@@ -353,10 +360,10 @@ export default function App() {
                   onComplete={completeTask}
                   whatsappToken={whatsappToken}
                   whatsappPhoneId={whatsappPhoneId}
-                  makeWebhookUrl={makeWebhookUrl}
+                  activepiecesWebhookUrl={activepiecesWebhookUrl}
                 />
               )}
-              {activeModule === 'email' && <EmailView apiKey={resendApiKey} setApiKey={setResendApiKey} makeWebhook={makeWebhookUrl} onSave={saveSettings} />}
+              {activeModule === 'email' && <EmailView apiKey={resendApiKey} setApiKey={setResendApiKey} activepiecesWebhook={activepiecesWebhookUrl} onSave={saveSettings} />}
               {activeModule === 'social' && (
                 <SocialView 
                   fbToken={fbAccessToken} setFbToken={setFbAccessToken} 
@@ -364,7 +371,7 @@ export default function App() {
                   igId={igAccountId} setIgId={setIgAccountId} 
                   waToken={whatsappToken} setWaToken={setWhatsappToken}
                   waPhoneId={whatsappPhoneId} setWaPhoneId={setWhatsappPhoneId}
-                  makeWebhook={makeWebhookUrl} setMakeWebhook={setMakeWebhookUrl}
+                  activepiecesWebhook={activepiecesWebhookUrl} setActivepiecesWebhook={setActivepiecesWebhookUrl}
                   onSave={saveSettings} 
                 />
               )}
@@ -598,12 +605,12 @@ function ScheduleDashboard({ posts, deletePost, whatsappToken, whatsappPhoneId }
   );
 }
 
-function EmailView({ apiKey, setApiKey, makeWebhook, onSave }: any) {
+function EmailView({ apiKey, setApiKey, activepiecesWebhook, onSave }: any) {
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [sendMethod, setSendMethod] = useState<'resend' | 'make'>(makeWebhook ? 'make' : 'resend');
+  const [sendMethod, setSendMethod] = useState<'resend' | 'activepieces'>(activepiecesWebhook ? 'activepieces' : 'resend');
 
   const sendEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -614,8 +621,8 @@ function EmailView({ apiKey, setApiKey, makeWebhook, onSave }: any) {
         return;
       }
     } else {
-      if (!makeWebhook || !to || !subject || !body) {
-        alert('Missing Make.com Webhook, Recipient, Subject or Body');
+      if (!activepiecesWebhook || !to || !subject || !body) {
+        alert('Missing Activepieces Webhook, Recipient, Subject or Body');
         return;
       }
     }
@@ -644,7 +651,7 @@ function EmailView({ apiKey, setApiKey, makeWebhook, onSave }: any) {
           throw new Error(data.message || 'Failed to send email');
         }
       } else {
-        const response = await fetch(makeWebhook, {
+        const response = await fetch(activepiecesWebhook, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -656,9 +663,9 @@ function EmailView({ apiKey, setApiKey, makeWebhook, onSave }: any) {
           })
         });
         if (response.ok) {
-          alert('Forwarded to Make.com successfully!');
+          alert('Forwarded to Activepieces successfully!');
         } else {
-          alert('Make.com rejected the email request.');
+          alert('Activepieces rejected the email request.');
         }
       }
       
@@ -686,9 +693,9 @@ function EmailView({ apiKey, setApiKey, makeWebhook, onSave }: any) {
                 className={`px-4 py-1.5 rounded-md text-[10px] font-bold transition-all ${sendMethod === 'resend' ? 'bg-blue-500 text-white' : 'text-slate-500 hover:text-slate-300'}`}
               >Resend API</button>
               <button 
-                onClick={() => setSendMethod('make')}
-                className={`px-4 py-1.5 rounded-md text-[10px] font-bold transition-all ${sendMethod === 'make' ? 'bg-indigo-500 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-              >Make.com</button>
+                onClick={() => setSendMethod('activepieces')}
+                className={`px-4 py-1.5 rounded-md text-[10px] font-bold transition-all ${sendMethod === 'activepieces' ? 'bg-indigo-500 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+              >Activepieces</button>
            </div>
         </div>
 
@@ -708,11 +715,11 @@ function EmailView({ apiKey, setApiKey, makeWebhook, onSave }: any) {
              <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-500 rounded-lg"><Zap size={20} className="text-white" /></div>
                 <div>
-                   <p className="text-xs font-bold text-white">Make.com Engine Active</p>
-                   <p className="text-[10px] text-slate-400">Webhook: {makeWebhook ? makeWebhook.substring(0, 40) + '...' : 'Missing! Set in Social Hub'}</p>
+                   <p className="text-xs font-bold text-white">Activepieces Engine Active</p>
+                   <p className="text-[10px] text-slate-400">Webhook: {activepiecesWebhook ? activepiecesWebhook.substring(0, 40) + '...' : 'Missing! Set in Social Hub'}</p>
                 </div>
              </div>
-             {!makeWebhook && <p className="text-[10px] text-red-400 font-bold animate-pulse">SET WEBHOOK IN SOCIAL HUB</p>}
+             {!activepiecesWebhook && <p className="text-[10px] text-red-400 font-bold animate-pulse">SET WEBHOOK IN SOCIAL HUB</p>}
           </div>
         )}
       </div>
@@ -760,7 +767,7 @@ function EmailView({ apiKey, setApiKey, makeWebhook, onSave }: any) {
   );
 }
 
-function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waToken, setWaToken, waPhoneId, setWaPhoneId, makeWebhook, setMakeWebhook, onSave }: any) {
+function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waToken, setWaToken, waPhoneId, setWaPhoneId, activepiecesWebhook, setActivepiecesWebhook, onSave }: any) {
   const [content, setContent] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [isPosting, setIsPosting] = useState(false);
@@ -887,27 +894,27 @@ function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waT
 
           <div className="space-y-4">
              <h4 className="text-[10px] uppercase font-black text-slate-500 tracking-widest flex items-center gap-2">
-               <Zap size={12} className="text-indigo-500" /> Make.com Automation Engine
+               <Zap size={12} className="text-indigo-500" /> Activepieces Automation Engine
              </h4>
              <div className="flex gap-2">
                <input 
                 type="text" 
-                value={makeWebhook} 
-                onChange={(e) => setMakeWebhook(e.target.value)} 
-                placeholder="Make.com Webhook URL" 
+                value={activepiecesWebhook} 
+                onChange={(e) => setActivepiecesWebhook(e.target.value)} 
+                placeholder="Activepieces Webhook URL" 
                 className="flex-1 bg-navy-900 border border-navy-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500/50 text-sm" 
               />
               <button 
                 onClick={async () => {
-                  if (!makeWebhook) return alert("Please enter webhook URL first.");
+                  if (!activepiecesWebhook) return alert("Please enter webhook URL first.");
                   try {
-                    const res = await fetch(makeWebhook, {
+                    const res = await fetch(activepiecesWebhook, {
                       method: 'POST',
                       headers: {'Content-Type': 'application/json'},
                       body: JSON.stringify({ test: true, source: 'Digicoup', timestamp: Date.now() })
                     });
-                    alert(res.ok ? "Make.com Connection Successful!" : "Make.com returned an error. Check your workflow activation.");
-                  } catch(e) { alert("Failed to reach Make.com. Check URL and CORS settings."); }
+                    alert(res.ok ? "Activepieces Connection Successful!" : "Activepieces returned an error. Check your workflow activation.");
+                  } catch(e) { alert("Failed to reach Activepieces. Check URL and CORS settings."); }
                 }}
                 className="px-4 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl text-[10px] font-bold hover:bg-indigo-500 hover:text-white transition-all"
               >
@@ -916,13 +923,13 @@ function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waT
             </div>
             <div className="bg-indigo-500/5 border border-indigo-500/10 p-3 rounded-xl">
                <p className="text-[10px] text-indigo-400 font-bold uppercase mb-1 flex items-center gap-1">
-                 <AlertCircle size={12} /> Make.com Setup Guide:
+                 <AlertCircle size={12} /> Activepieces Setup Guide:
                </p>
                <ul className="text-[9px] text-slate-500 space-y-1">
-                 <li>1. Create a new Scenario in Make.com.</li>
-                 <li>2. Add a "Webhooks" module and select "Custom Webhook".</li>
-                 <li>3. Copy the URL and paste it here.</li>
-                 <li>4. Add tools like WhatsApp/Email nodes after the Webhook.</li>
+                 <li>1. Log in to cloud.activepieces.com and create a new Flow.</li>
+                 <li>2. Choose "Webhook" as your Trigger.</li>
+                 <li>3. Copy the Webhook URL and paste it here.</li>
+                 <li>4. Add tools like WhatsApp/Gmail/Post nodes after the trigger.</li>
                </ul>
                <button 
                  onClick={() => {
@@ -934,7 +941,7 @@ function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waT
                      timestamp: Date.now()
                    };
                    navigator.clipboard.writeText(JSON.stringify(sample, null, 2));
-                   alert("Sample JSON copied! Paste this into Make.com 'Determine Data Structure' if needed.");
+                   alert("Sample JSON copied! Use this to generate your data schema in Activepieces.");
                  }}
                  className="mt-2 text-[8px] bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded uppercase font-bold hover:bg-indigo-500 hover:text-white transition-all"
                >
@@ -1012,7 +1019,7 @@ function SocialView({ fbToken, setFbToken, pageId, setPageId, igId, setIgId, waT
   );
 }
 
-function DashboardView({ posts, deletePost }: any) {
+function DashboardView({ posts, deletePost, whatsappToken, whatsappPhoneId }: any) {
   // Overriding StatCard icons and grid for specific look
   return (
     <div className="space-y-8">
@@ -1022,7 +1029,12 @@ function DashboardView({ posts, deletePost }: any) {
         <StatCard title="Meta Status" value="Stable" subValue="Graph v18.0" icon={<Share2 className="text-purple-500" />} />
         <StatCard title="AI Precision" value="High" subValue="Gemini 1.5 Flush" icon={<Sparkles className="text-gold-500" />} />
       </div>
-      <ScheduleDashboard posts={posts} deletePost={deletePost} />
+      <ScheduleDashboard 
+        posts={posts} 
+        deletePost={deletePost} 
+        whatsappToken={whatsappToken}
+        whatsappPhoneId={whatsappPhoneId}
+      />
     </div>
   );
 }
@@ -1070,7 +1082,7 @@ function StatCard({ title, value, subValue, icon }: { title: string, value: stri
   );
 }
 
-function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken, whatsappPhoneId, makeWebhookUrl }: { onSchedule: (post: any) => void, posts: any[], deletePost: (id: string) => void, onComplete: (id: string) => void, whatsappToken: string, whatsappPhoneId: string, makeWebhookUrl: string }) {
+function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken, whatsappPhoneId, activepiecesWebhookUrl }: { onSchedule: (post: any) => void, posts: any[], deletePost: (id: string) => void, onComplete: (id: string) => void, whatsappToken: string, whatsappPhoneId: string, activepiecesWebhookUrl: string }) {
   const [accountAge, setAccountAge] = useState(1);
   const [contacts, setContacts] = useState<string>('');
   const [rawMessage, setRawMessage] = useState('');
@@ -1080,8 +1092,8 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
   const [scheduledTime, setScheduledTime] = useState('');
   const [isAutomating, setIsAutomating] = useState(false);
   const [lastApiStatus, setLastApiStatus] = useState<{success: boolean, message: string} | null>(null);
-  const [automationMode, setAutomationMode] = useState<'api' | 'manual' | 'make'>(
-    makeWebhookUrl ? 'make' : (window.location.hostname.includes('vercel.app') ? 'manual' : 'api')
+  const [automationMode, setAutomationMode] = useState<'api' | 'manual' | 'activepieces'>(
+    activepiecesWebhookUrl ? 'activepieces' : (window.location.hostname.includes('vercel.app') ? 'manual' : 'api')
   );
 
   const whatsappPosts = posts.filter(p => p.platform === 'whatsapp');
@@ -1114,7 +1126,7 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [readyForManualPush, setReadyForManualPush] = useState<any>(null);
-  const [makeStatus, setMakeStatus] = useState<{success: boolean, message: string} | null>(null);
+  const [webhookStatus, setWebhookStatus] = useState<{success: boolean, message: string} | null>(null);
 
   // Auto-Automation Logic
   useEffect(() => {
@@ -1205,15 +1217,15 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                 setCurrentAutoTarget(null);
               }
             }
-          } else if (automationMode === 'make') {
-            if (!makeWebhookUrl) {
-              alert('Please set your Make.com Webhook URL in Social Hub settings.');
+          } else if (automationMode === 'activepieces') {
+            if (!activepiecesWebhookUrl) {
+              alert('Please set your Activepieces Webhook URL in Social Hub settings.');
               setIsAutomating(false);
               return;
             }
             setIsSending(true);
             try {
-              const res = await fetch(makeWebhookUrl, {
+              const res = await fetch(activepiecesWebhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1226,12 +1238,12 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
               });
               if (res.ok) {
                 onComplete(nextPost.id);
-                setMakeStatus({ success: true, message: 'Forwarded to Make.' });
+                setWebhookStatus({ success: true, message: 'Forwarded to Activepieces.' });
               } else {
-                setMakeStatus({ success: false, message: 'Make.com rejected request.' });
+                setWebhookStatus({ success: false, message: 'Activepieces rejected request.' });
               }
             } catch (e: any) {
-              setMakeStatus({ success: false, message: 'Make connection failed.' });
+              setWebhookStatus({ success: false, message: 'Activepieces connection failed.' });
             } finally {
               setIsSending(false);
               if (pendingPosts.length === 1) {
@@ -1496,9 +1508,9 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                        <p className="text-xs text-white font-bold italic">🚀 SENDING MODE:</p>
                        <div className="flex bg-navy-800 rounded-lg p-1">
                           <button 
-                            onClick={() => setAutomationMode('make')}
-                            className={`px-3 py-1 text-[10px] rounded-md transition-all ${automationMode === 'make' ? 'bg-indigo-500 text-white font-bold animate-pulse' : 'text-slate-400'}`}
-                          >Make.com (Fastest)</button>
+                            onClick={() => setAutomationMode('activepieces')}
+                            className={`px-3 py-1 text-[10px] rounded-md transition-all ${automationMode === 'activepieces' ? 'bg-indigo-500 text-white font-bold animate-pulse' : 'text-slate-400'}`}
+                          >Activepieces</button>
                           <button 
                             onClick={() => setAutomationMode('api')}
                             className={`px-3 py-1 text-[10px] rounded-md transition-all ${automationMode === 'api' ? 'bg-gold-500 text-navy-900 font-bold' : 'text-slate-400'}`}
@@ -1573,13 +1585,13 @@ function WhatsAppView({ onSchedule, posts, deletePost, onComplete, whatsappToken
                           </button>
                         </div>
                       </>
-                    ) : automationMode === 'make' ? (
+                    ) : automationMode === 'activepieces' ? (
                       <div className="space-y-3">
-                        <p className="text-[10px] text-indigo-400 font-bold uppercase mb-1">Make.com Scenario Active</p>
-                        <p className="text-[9px] text-slate-400 leading-tight">Digicoup is sending data to your Make.com webhook. Ensure your scenario is active.</p>
-                        {makeStatus && (
-                          <div className={`mt-2 p-2 rounded text-[10px] font-mono ${makeStatus.success ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-500 border border-red-500/30'}`}>
-                            {makeStatus.success ? '✓ ' : '✗ ERROR: '}{makeStatus.message}
+                        <p className="text-[10px] text-indigo-400 font-bold uppercase mb-1">Activepieces Flow Active</p>
+                        <p className="text-[9px] text-slate-400 leading-tight">Digicoup is sending data to your Activepieces webhook. Make sure your flow is published.</p>
+                        {webhookStatus && (
+                          <div className={`mt-2 p-2 rounded text-[10px] font-mono ${webhookStatus.success ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-500 border border-red-500/30'}`}>
+                            {webhookStatus.success ? '✓ ' : '✗ ERROR: '}{webhookStatus.message}
                           </div>
                         )}
                       </div>
